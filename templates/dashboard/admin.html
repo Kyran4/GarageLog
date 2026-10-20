@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+
+{% block title %}Admin dashboard | GarageLog{% endblock %}
+
+{% block content %}
+<h1 class="h2">Admin dashboard</h1>
+<p class="text-body-secondary">Welcome, {{ user.first_name|default:user.username }}</p>
+
+<section aria-labelledby="summary-heading" class="mb-4">
+    <h2 class="h5" id="summary-heading">Users at a glance</h2>
+    <div class="row g-3">
+        <div class="col-6 col-md-3"><div class="card"><div class="card-body"><p class="display-6 mb-0">{{ total_users }}</p><p class="mb-0">Total users</p></div></div></div>
+        <div class="col-6 col-md-3"><div class="card"><div class="card-body"><p class="display-6 mb-0">{{ customer_count }}</p><p class="mb-0">Customers</p></div></div></div>
+        <div class="col-6 col-md-3"><div class="card"><div class="card-body"><p class="display-6 mb-0">{{ mechanic_count }}</p><p class="mb-0">Mechanics</p></div></div></div>
+        <div class="col-6 col-md-3"><div class="card"><div class="card-body"><p class="display-6 mb-0">{{ admin_count }}</p><p class="mb-0">Admins</p></div></div></div>
+    </div>
+</section>
+
+<div class="row g-3 mb-4">
+    {% include 'dashboard/_placeholder_card.html' with slug='bookings' title='Bookings' text='Manage all workshop bookings.' %}
+    {% include 'dashboard/_placeholder_card.html' with slug='inventory' title='Parts inventory' text='Track stock and low-stock alerts.' %}
+    {% include 'dashboard/_placeholder_card.html' with slug='analytics' title='Analytics' text='Bookings, revenue and upcoming expiries.' %}
+</div>
+
+<section aria-labelledby="users-heading">
+    <h2 class="h5" id="users-heading">Users</h2>
+    <div class="table-responsive">
+        <table class="table table-striped align-middle">
+            <caption class="visually-hidden">All registered users, newest first</caption>
+            <thead>
+                <tr>
+                    <th scope="col">Username</th>
+                    <th scope="col">Name</th>
+                    <th scope="col">Email</th>
+                    <th scope="col">Role</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Joined</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for person in users %}
+                <tr>
+                    <th scope="row">{{ person.username }}</th>
+                    <td>{{ person.get_full_name|default:"-" }}</td>
+                    <td>{{ person.email }}</td>
+                    <td>{{ person.get_role_display }}</td>
+                    <td>{% if person.is_active %}Active{% elif person.email_verified %}Disabled{% else %}Awaiting email verification{% endif %}</td>
+                    <td>{{ person.date_joined|date:"j M Y" }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6">No users yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if is_paginated %}
+    <nav aria-label="User list pages">
+        <ul class="pagination">
+            {% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}">Previous</a></li>{% endif %}
+            <li class="page-item active" aria-current="page"><span class="page-link">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span></li>
+            {% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}">Next</a></li>{% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+</section>
+{% endblock %}

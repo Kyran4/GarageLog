@@ -1,0 +1,11 @@
+{% extends 'base.html' %}
+
+{% block title %}Access denied | GarageLog{% endblock %}
+
+{% block content %}
+<div class="text-center py-5">
+    <h1 class="display-6">You don't have access to this page</h1>
+    <p class="lead">Your account's role doesn't include this part of GarageLog.</p>
+    <a class="btn btn-primary" href="{% if user.is_authenticated %}{% url 'dashboard' %}{% else %}{% url 'home' %}{% endif %}">Back to {% if user.is_authenticated %}your dashboard{% else %}the home page{% endif %}</a>
+</div>
+{% endblock %}
