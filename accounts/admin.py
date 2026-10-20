@@ -1,7 +1,16 @@
 from django.contrib import admin
-from django.contrib.auth.admin import UserAdmin
+from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 
 from .models import User
 
 
-admin.site.register(User, UserAdmin)
+@admin.register(User)
+class UserAdmin(DjangoUserAdmin):
+    list_display = ('username', 'email', 'first_name', 'last_name', 'role', 'is_active', 'email_verified')
+    list_filter = DjangoUserAdmin.list_filter + ('role', 'email_verified')
+    fieldsets = DjangoUserAdmin.fieldsets + (
+        ('GarageLog', {'fields': ('role', 'phone', 'email_verified')}),
+    )
+    add_fieldsets = DjangoUserAdmin.add_fieldsets + (
+        ('GarageLog', {'fields': ('email', 'role', 'phone')}),
+    )
