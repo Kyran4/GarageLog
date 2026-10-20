@@ -3,5 +3,18 @@
 {% block title %}Home | GarageLog{% endblock %}
 
 {% block content %}
-<h1>GarageLog</h1>
+<div class="row justify-content-center">
+    <div class="col-lg-8 text-center py-4">
+        <h1 class="display-5 fw-bold">GarageLog</h1>
+        <p class="lead">Vehicle service history, bookings and WOF and registration reminders for independent workshops.</p>
+        <div class="d-flex flex-wrap justify-content-center gap-2">
+            {% if user.is_authenticated %}
+            <a class="btn btn-primary btn-lg" href="{% url 'dashboard' %}">Go to your dashboard</a>
+            {% else %}
+            <a class="btn btn-primary btn-lg" href="{% url 'accounts:login' %}">Log in</a>
+            <a class="btn btn-outline-primary btn-lg" href="{% url 'accounts:signup' %}">Create an account</a>
+            {% endif %}
+        </div>
+    </div>
+</div>
 {% endblock %}
