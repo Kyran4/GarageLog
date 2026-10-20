@@ -67,6 +67,5 @@ Logged-out users are sent to the login page; users with the wrong role get the 4
 
 ## Git workflow
 
-- `main` is protected; work on `feature/*` branches and open pull requests.
 - Every pull request needs one review and a passing CI run (`.github/workflows/ci.yml`).
 - Use conventional commit messages, for example `feat: add vehicle list view`.
