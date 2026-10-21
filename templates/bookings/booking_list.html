@@ -1,11 +1,32 @@
-﻿<!DOCTYPE html>
+﻿{% extends "base.html" %}
 
-<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
-<head>
-    <meta charset="utf-8" />
-    <title></title>
-</head>
-<body>
+{% block content %}
 
-</body>
-</html>
+<h2>My Bookings</h2>
+
+<a href="{% url 'create_booking' %}">
+    Create New Booking
+</a>
+
+<hr>
+
+{% for booking in bookings %}
+
+<div>
+    <h3>{{ booking.service_type }}</h3>
+
+    <p>Date: {{ booking.booking_date }}</p>
+    <p>Time: {{ booking.booking_time }}</p>
+    <p>Status: {{ booking.get_status_display }}</p>
+    <p>Notes: {{ booking.notes }}</p>
+</div>
+
+<hr>
+
+{% empty %}
+
+<p>You have no bookings yet.</p>
+
+{% endfor %}
+
+{% endblock %}
