@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+
+{% block title %}Log in | GarageLog{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-5">
+        <h1 class="h2 mb-3">Log in</h1>
+        <form method="post" novalidate>
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ next }}">
+            {% include 'includes/form.html' with form=form %}
+            <button type="submit" class="btn btn-primary">Log in</button>
+        </form>
+        <ul class="list-unstyled mt-3 mb-0">
+            <li><a href="{% url 'accounts:password_reset' %}">Forgot your password?</a></li>
+            <li><a href="{% url 'accounts:resend_verification' %}">Resend verification email</a></li>
+            <li>New here? <a href="{% url 'accounts:signup' %}">Create an account</a></li>
+        </ul>
+    </div>
+</div>
+{% endblock %}

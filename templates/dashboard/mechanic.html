@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+
+{% block title %}Mechanic dashboard | GarageLog{% endblock %}
+
+{% block content %}
+<h1 class="h2">Welcome, {{ user.first_name|default:user.username }}</h1>
+<p class="text-body-secondary">Mechanic dashboard</p>
+<div class="row g-3">
+    {% include 'dashboard/_placeholder_card.html' with slug='assigned' title='Assigned bookings' text='Your bookings for today and the week ahead.' %}
+    {% include 'dashboard/_placeholder_card.html' with slug='jobs' title='Job cards' text='Update job status, notes and parts used.' %}
+</div>
+{% endblock %}

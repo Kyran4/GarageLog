@@ -1,0 +1,13 @@
+{% extends 'base.html' %}
+
+{% block title %}Customer dashboard | GarageLog{% endblock %}
+
+{% block content %}
+<h1 class="h2">Welcome, {{ user.first_name|default:user.username }}</h1>
+<p class="text-body-secondary">Customer dashboard</p>
+<div class="row g-3">
+    {% include 'dashboard/_placeholder_card.html' with slug='vehicles' title='My vehicles' text='Add your vehicles and keep track of WOF and registration dates.' %}
+    {% include 'dashboard/_placeholder_card.html' with slug='bookings' title='My bookings' text='Book a service and see your upcoming appointments.' %}
+    {% include 'dashboard/_placeholder_card.html' with slug='history' title='Service history' text='See everything that has been done on each of your vehicles.' %}
+</div>
+{% endblock %}

@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 
 import dj_database_url
+from django.contrib import messages
 from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -100,6 +101,9 @@ DATABASES = {
 
 AUTH_USER_MODEL = 'accounts.User'
 
+# Log in with either username or email.
+AUTHENTICATION_BACKENDS = ['accounts.backends.EmailOrUsernameBackend']
+
 
 # Password validation
 # https://docs.djangoproject.com/en/6.1/ref/settings/#auth-password-validators
@@ -138,9 +142,12 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-LOGIN_URL = '/accounts/login/'
-LOGIN_REDIRECT_URL = '/'
-LOGOUT_REDIRECT_URL = '/'
+LOGIN_URL = 'accounts:login'
+LOGIN_REDIRECT_URL = 'dashboard'  # sends each user to their role dashboard
+LOGOUT_REDIRECT_URL = 'home'
+
+# Show Django's "error" messages with Bootstrap's "danger" alert style.
+MESSAGE_TAGS = {messages.ERROR: 'danger'}
 
 
 # Email
@@ -149,3 +156,4 @@ LOGOUT_REDIRECT_URL = '/'
 EMAIL_BACKEND = os.getenv(
     'EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend'
 )
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'GarageLog <noreply@garagelog.local>')
