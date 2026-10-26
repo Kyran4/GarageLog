@@ -33,3 +33,32 @@ class BookingFormTests(TestCase):
         })
 
         self.assertTrue(form.is_valid())
+
+    def test_other_service_is_required(self):
+        tomorrow = timezone.localdate() + timedelta(days=1)
+
+        form = BookingForm(data={
+            "booking_date": tomorrow.isoformat(),
+            "booking_time": "10:00",
+            "service_type": "Other",
+            "other_service": "",
+        })
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("other_service", form.errors)
+
+    def test_custom_service_is_accepted(self):
+        tomorrow = timezone.localdate() + timedelta(days=1)
+
+        form = BookingForm(data={
+            "booking_date": tomorrow.isoformat(),
+            "booking_time": "10:00",
+            "service_type": "Other",
+            "other_service": "Air Conditioning Repair",
+        })
+
+        self.assertTrue(form.is_valid())
+        self.assertEqual(
+            form.cleaned_data["service_type"],
+            "Air Conditioning Repair"
+        )

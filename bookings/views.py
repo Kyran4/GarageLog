@@ -13,7 +13,7 @@ def create_booking(request):
 
 		if form.is_valid():
 			booking = form.save(commit=False)
-			booking.user = request.user
+			booking.customer = request.user
 			booking.save()
 
 			return redirect("booking_list")
@@ -26,7 +26,7 @@ def create_booking(request):
 @login_required
 def booking_list(request):
     bookings = Booking.objects.filter(
-        user=request.user
+        customer=request.user
     ).order_by("-booking_date", "-booking_time")
 
     return render(

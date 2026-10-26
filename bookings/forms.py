@@ -5,6 +5,31 @@ from .models import Booking
 
 class BookingForm(forms.ModelForm):
 
+    SERVICE_CHOICES = [
+        ("", "Select a service"),
+        ("WoF Inspection", "WoF Inspection"),
+        ("Oil Change", "Oil Change"),
+        ("Full Service", "Full Service"),
+        ("Brake Repair", "Brake Repair"),
+        ("Tyre Replacement", "Tyre Replacement"),
+        ("Battery Replacement", "Battery Replacement"),
+        ("Engine Diagnostics", "Engine Diagnostics"),
+        ("Other", "Other (please specify)"),
+    ]
+
+    service_type = forms.ChoiceField(
+        choices=SERVICE_CHOICES
+    )
+
+    other_service = forms.CharField(
+        required=False,
+        max_length=100,
+        label="Other service",
+        widget=forms.TextInput(
+            attrs={"placeholder": "Describe the service"}
+        )
+    )
+
     class Meta:
         model = Booking
 
@@ -36,3 +61,20 @@ class BookingForm(forms.ModelForm):
             )
 
         return date
+
+    def clean(self):
+        cleaned_data = super().clean()
+
+        service = cleaned_data.get("service_type")
+        other = (cleaned_data.get("other_service") or "").strip()
+
+        if service == "Other":
+            if not other:
+                self.add_error(
+                    "other_service",
+                    "Please describe the service you need."
+                )
+            else:
+                cleaned_data["service_type"] = other
+
+        return cleaned_data
