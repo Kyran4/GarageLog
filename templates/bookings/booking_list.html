@@ -2,6 +2,46 @@
 
 {% block content %}
 
+<style>
+    .booking-actions {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        margin-top: 15px;
+    }
+
+    .booking-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 150px;
+        height: 40px;
+        padding: 8px 12px;
+        font-size: 14px;
+        font-weight: 400;
+        line-height: 1;
+        box-sizing: border-box;
+        text-decoration: none;
+        border: 1px solid #6c757d;
+        border-radius: 5px;
+        background-color: #6c757d;
+        color: white;
+        cursor: pointer;
+        font-family: inherit;
+    }
+
+        .booking-button:hover {
+            background-color: #5c636a;
+            border-color: #565e64;
+            color: white;
+            text-decoration: none;
+        }
+
+    .booking-actions form {
+        margin: 0;
+    }
+</style>
+
 <h2>My Bookings</h2>
 
 <a href="{% url 'create_booking' %}">
@@ -19,27 +59,30 @@
     <p>Time: {{ booking.booking_time }}</p>
     <p>Status: {{ booking.get_status_display }}</p>
     <p>Notes: {{ booking.notes }}</p>
-    {% if booking.status != "CANCELLED" and booking.status != "COMPLETED" %}
-    <a href="{% url 'edit_booking' booking.id %}"
-       style="display: inline-block; padding: 2px 6px;
-          border: 2px outset ButtonBorder;
-          background: ButtonFace; color: ButtonText;
-          text-decoration: none; font: 13.3333px Arial;">
-        Edit Booking
-    </a>
-    {% endif %}
 
     {% if booking.status != "CANCELLED" and booking.status != "COMPLETED" %}
-    <form method="POST"
-          action="{% url 'cancel_booking' booking.id %}"
-          onsubmit="return confirm('Are you sure you want to cancel this booking?');">
 
-        {% csrf_token %}
+    <div class="booking-actions">
 
-        <button type="submit">
-            Cancel Booking
-        </button>
-    </form>
+        <a href="{% url 'edit_booking' booking.id %}"
+           class="booking-button">
+            Edit Booking
+        </a>
+
+        <form method="POST"
+              action="{% url 'cancel_booking' booking.id %}"
+              onsubmit="return confirm('Are you sure you want to cancel this booking?');">
+
+            {% csrf_token %}
+
+            <button type="submit" class="booking-button">
+                Cancel Booking
+            </button>
+
+        </form>
+
+    </div>
+
     {% endif %}
 
 </div>
