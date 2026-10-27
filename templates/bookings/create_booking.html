@@ -1,66 +1,84 @@
-﻿{% extends "base.html" %}
+{% extends 'base.html' %}
+
+{% block title %}{{ page_title }} | GarageLog{% endblock %}
 
 {% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <h1 class="h2 mb-3">{{ page_title }}</h1>
+        <form method="post" novalidate>
+            {% csrf_token %}
+            {% include 'includes/form.html' with form=form %}
+            <button type="submit" class="btn btn-primary">{% if booking %}Save changes{% else %}Submit booking{% endif %}</button>
+            <a class="btn btn-link" href="{% if booking %}{% url 'booking_detail' booking.pk %}{% else %}{% url 'booking_list' %}{% endif %}">Cancel</a>
+        </form>
+    </div>
+</div>
+{% endblock %}
 
-<h2>Create a Booking</h2>
-
-<form method="POST">
-    {% csrf_token %}
-
-    {{ form.non_field_errors }}
-
-    <p>
-        {{ form.booking_date.label_tag }}
-        {{ form.booking_date }}
-        {{ form.booking_date.errors }}
-    </p>
-
-    <p>
-        {{ form.booking_time.label_tag }}
-        {{ form.booking_time }}
-        {{ form.booking_time.errors }}
-    </p>
-
-    <p>
-        {{ form.service_type.label_tag }}
-        {{ form.service_type }}
-        {{ form.service_type.errors }}
-    </p>
-
-    <p id="other-service-container" hidden>
-        {{ form.other_service.label_tag }}
-        {{ form.other_service }}
-        {{ form.other_service.errors }}
-    </p>
-
-    <p>
-        {{ form.notes.label_tag }}
-        {{ form.notes }}
-        {{ form.notes.errors }}
-    </p>
-
-    <button type="submit">Submit Booking</button>
-</form>
-
-<a href="{% url 'booking_list' %}">
-    Back to My Bookings
-</a>
-
+{% block scripts %}
 <script>
-document.addEventListener("DOMContentLoaded", function () {
-    const serviceSelect = document.getElementById("id_service_type");
-    const otherContainer = document.getElementById("other-service-container");
-    const otherInput = document.getElementById("id_other_service");
+    document.addEventListener('DOMContentLoaded', function () {
+        // Only show "Other service" when "Other" is picked. Without JavaScript the field simply stays visible.
+        var serviceSelect = document.getElementById('id_service_type');
+        var otherInput = document.getElementById('id_other_service');
+        if (serviceSelect && otherInput) {
+            var otherGroup = otherInput.closest('.mb-3');
+            var toggleOther = function () {
+                var isOther = serviceSelect.value === 'Other';
+                otherGroup.hidden = !isOther;
+                otherInput.required = isOther;
+            };
+            serviceSelect.addEventListener('change', toggleOther);
+            toggleOther();
+        }
 
-    function toggleOther() {
-        const isOther = serviceSelect.value === "Other";
-        otherContainer.hidden = !isOther;
-        otherInput.required = isOther;
-    }
+        // Admins: only offer the vehicles that belong to the selected customer.
+        // Without JavaScript every vehicle is listed and the server still rejects a mismatch.
+        var customerSelect = document.getElementById('id_customer');
+        var vehicleSelect = document.getElementById('id_vehicle');
+        if (customerSelect && vehicleSelect) {
+            var allOptions = Array.prototype.slice.call(vehicleSelect.options).map(function (option) {
+                return { value: option.value, text: option.text, owner: option.getAttribute('data-owner') };
+            });
+            var status = document.createElement('div');
+            status.className = 'form-text';
+            status.setAttribute('aria-live', 'polite');
+            vehicleSelect.parentNode.insertBefore(status, vehicleSelect.nextSibling);
 
-    serviceSelect.addEventListener("change", toggleOther);
-    toggleOther();
-});
+            var filterVehicles = function () {
+                var customer = customerSelect.value;
+                var previous = vehicleSelect.value;
+                var matches = allOptions.filter(function (option) {
+                    return option.value !== '' && option.owner === customer;
+                });
+
+                vehicleSelect.innerHTML = '';
+                var placeholder = document.createElement('option');
+                placeholder.value = '';
+                placeholder.textContent = !customer ? 'Select a customer first'
+                    : matches.length ? 'Select a vehicle' : 'This customer has no vehicles';
+                vehicleSelect.appendChild(placeholder);
+                matches.forEach(function (option) {
+                    var element = document.createElement('option');
+                    element.value = option.value;
+                    element.textContent = option.text;
+                    element.setAttribute('data-owner', option.owner);
+                    vehicleSelect.appendChild(element);
+                });
+
+                // Keep the chosen vehicle only if it belongs to the newly selected customer.
+                vehicleSelect.value = previous;
+                if (vehicleSelect.value !== previous) { vehicleSelect.selectedIndex = 0; }
+
+                status.textContent = !customer ? ''
+                    : matches.length === 1 ? '1 vehicle available for this customer.'
+                    : matches.length + ' vehicles available for this customer.';
+            };
+
+            customerSelect.addEventListener('change', filterVehicles);
+            filterVehicles();
+        }
+    });
 </script>
-
 {% endblock %}

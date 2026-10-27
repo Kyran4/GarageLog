@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+
+{% block title %}Delete {{ vehicle.plate }} | GarageLog{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <h1 class="h2 mb-3">Delete {{ vehicle.plate }}?</h1>
+        <p>This permanently removes {{ vehicle.year }} {{ vehicle.make }} {{ vehicle.model }} from GarageLog. A vehicle that has bookings can't be deleted, because its service history needs to be kept.</p>
+        <form method="post">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">Yes, delete it</button>
+            <a class="btn btn-link" href="{% url 'vehicles:detail' vehicle.pk %}">No, keep it</a>
+        </form>
+    </div>
+</div>
+{% endblock %}

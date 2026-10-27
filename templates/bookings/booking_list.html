@@ -1,32 +1,67 @@
-﻿{% extends "base.html" %}
+{% extends 'base.html' %}
+
+{% block title %}{{ page_title }} | GarageLog{% endblock %}
 
 {% block content %}
-
-<h2>My Bookings</h2>
-
-<a href="{% url 'create_booking' %}">
-    Create New Booking
-</a>
-
-<hr>
-
-{% for booking in bookings %}
-
-<div>
-    <h3>{{ booking.service_type }}</h3>
-
-    <p>Date: {{ booking.booking_date }}</p>
-    <p>Time: {{ booking.booking_time }}</p>
-    <p>Status: {{ booking.get_status_display }}</p>
-    <p>Notes: {{ booking.notes }}</p>
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <h1 class="h2 mb-0">{{ page_title }}</h1>
+    {% if can_create %}<a class="btn btn-primary" href="{% url 'create_booking' %}">Book a service</a>{% endif %}
 </div>
 
-<hr>
+{% if is_admin %}
+<nav aria-label="Filter bookings by status" class="mb-3">
+    <ul class="nav nav-pills">
+        {% for value, label in status_options %}
+        <li class="nav-item">
+            <a class="nav-link{% if value == status_filter %} active{% endif %}" {% if value == status_filter %}aria-current="page"{% endif %} href="{% url 'booking_list' %}{% if value %}?status={{ value }}{% endif %}">{{ label }}</a>
+        </li>
+        {% endfor %}
+    </ul>
+</nav>
+{% endif %}
 
-{% empty %}
-
-<p>You have no bookings yet.</p>
-
-{% endfor %}
-
+{% if bookings %}
+<div class="table-responsive">
+    <table class="table table-striped align-middle">
+        <caption class="visually-hidden">{{ page_title }}, newest first</caption>
+        <thead>
+            <tr>
+                <th scope="col">Date</th>
+                <th scope="col">Time</th>
+                <th scope="col">Service</th>
+                <th scope="col">Vehicle</th>
+                {% if is_admin or is_mechanic %}<th scope="col">Customer</th>{% endif %}
+                {% if is_admin %}<th scope="col">Mechanic</th>{% endif %}
+                <th scope="col">Status</th>
+                <th scope="col"><span class="visually-hidden">Actions</span></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for booking in bookings %}
+            <tr>
+                <th scope="row">{{ booking.booking_date|date:"D j M Y" }}</th>
+                <td>{{ booking.booking_time|time:"g:i a" }}</td>
+                <td>{{ booking.service_type }}</td>
+                <td>{{ booking.vehicle.plate|default:"-" }}</td>
+                {% if is_admin or is_mechanic %}<td>{{ booking.customer.get_full_name|default:booking.customer.username }}</td>{% endif %}
+                {% if is_admin %}<td>{% if booking.mechanic %}{{ booking.mechanic.get_full_name|default:booking.mechanic.username }}{% else %}<span class="text-body-secondary">Not assigned</span>{% endif %}</td>{% endif %}
+                <td>{% include 'includes/booking_status.html' with status=booking.status label=booking.get_status_display %}</td>
+                <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{% url 'booking_detail' booking.pk %}">View<span class="visually-hidden"> booking #{{ booking.pk }}</span></a></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% if is_paginated %}
+<nav aria-label="Booking list pages">
+    <ul class="pagination">
+        {% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if status_filter %}&amp;status={{ status_filter }}{% endif %}">Previous</a></li>{% endif %}
+        <li class="page-item active" aria-current="page"><span class="page-link">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span></li>
+        {% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if status_filter %}&amp;status={{ status_filter }}{% endif %}">Next</a></li>{% endif %}
+    </ul>
+</nav>
+{% endif %}
+{% else %}
+<p>{% if is_mechanic %}No bookings have been assigned to you yet.{% elif is_admin %}No bookings{% if status_filter %} with this status{% endif %}.{% else %}You have no bookings yet.{% endif %}</p>
+{% endif %}
 {% endblock %}

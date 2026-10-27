@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if user.is_admin_role %}All vehicles{% else %}My vehicles{% endif %} | GarageLog{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <h1 class="h2 mb-0">{% if user.is_admin_role %}All vehicles{% else %}My vehicles{% endif %}</h1>
+    <a class="btn btn-primary" href="{% url 'vehicles:create' %}">Add a vehicle</a>
+</div>
+
+{% if vehicles %}
+<div class="table-responsive">
+    <table class="table table-striped align-middle">
+        <caption class="visually-hidden">Vehicles with their WoF and registration expiry dates</caption>
+        <thead>
+            <tr>
+                <th scope="col">Plate</th>
+                <th scope="col">Vehicle</th>
+                {% if user.is_admin_role %}<th scope="col">Owner</th>{% endif %}
+                <th scope="col">WoF expiry</th>
+                <th scope="col">Registration expiry</th>
+                <th scope="col"><span class="visually-hidden">Actions</span></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for vehicle in vehicles %}
+            <tr>
+                <th scope="row">{{ vehicle.plate }}</th>
+                <td>{{ vehicle.year }} {{ vehicle.make }} {{ vehicle.model }}</td>
+                {% if user.is_admin_role %}<td>{{ vehicle.owner.username }}</td>{% endif %}
+                <td>{% include 'includes/expiry.html' with date=vehicle.wof_expiry status=vehicle.wof_status %}</td>
+                <td>{% include 'includes/expiry.html' with date=vehicle.rego_expiry status=vehicle.rego_status %}</td>
+                <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{% url 'vehicles:detail' vehicle.pk %}">View<span class="visually-hidden"> {{ vehicle.plate }}</span></a></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% if is_paginated %}
+<nav aria-label="Vehicle list pages">
+    <ul class="pagination">
+        {% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}">Previous</a></li>{% endif %}
+        <li class="page-item active" aria-current="page"><span class="page-link">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span></li>
+        {% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}">Next</a></li>{% endif %}
+    </ul>
+</nav>
+{% endif %}
+{% else %}
+<p>{% if user.is_admin_role %}No vehicles have been added yet.{% else %}You haven't added a vehicle yet. Add one to book a service and track its WoF and registration dates.{% endif %}</p>
+{% endif %}
+{% endblock %}

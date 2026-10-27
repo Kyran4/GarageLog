@@ -1,0 +1,448 @@
+import datetime
+
+import pytest
+from django.urls import reverse
+
+from accounts.models import User
+
+from .models import Booking
+from .tests import frozen_now
+
+pytestmark = pytest.mark.django_db
+
+
+def names(response):
+    return [template.name for template in response.templates]
+
+
+# ---------------------------------------------------------------- access
+
+
+@pytest.mark.parametrize('url_name, needs_pk', [
+    ('booking_list', False), ('create_booking', False), ('booking_detail', True),
+    ('booking_edit', True), ('booking_cancel', True), ('booking_delete', True),
+])
+def test_anonymous_users_are_sent_to_login(client, customer, vehicle, make_booking, url_name, needs_pk):
+    kwargs = {'pk': make_booking(customer, vehicle).pk} if needs_pk else {}
+    url = reverse(url_name, kwargs=kwargs)
+
+    response = client.get(url)
+
+    assert response.status_code == 302
+    assert response.url == f"{reverse('accounts:login')}?next={url}"
+
+
+def test_mechanics_cannot_create_or_edit_bookings(client, mechanic, customer, vehicle, make_booking):
+    booking = make_booking(customer, vehicle, mechanic=mechanic)
+    client.force_login(mechanic)
+
+    assert client.get(reverse('create_booking')).status_code == 403
+    assert client.get(reverse('booking_edit', kwargs={'pk': booking.pk})).status_code == 403
+    assert client.get(reverse('booking_delete', kwargs={'pk': booking.pk})).status_code == 403
+
+
+def test_customers_cannot_delete_bookings(client, customer, vehicle, make_booking):
+    booking = make_booking(customer, vehicle)
+    client.force_login(customer)
+
+    response = client.post(reverse('booking_delete', kwargs={'pk': booking.pk}))
+
+    assert response.status_code == 403
+    assert Booking.objects.filter(pk=booking.pk).exists()
+
+
+# ---------------------------------------------------------------- who sees what
+
+
+def test_customer_only_sees_their_own_bookings(client, customer, vehicle, make_user, make_vehicle, make_booking):
+    other = make_user('sam')
+    theirs = make_booking(other, make_vehicle(other, plate='SAM111'), service_type='Brake Repair')
+    mine = make_booking(customer, vehicle, service_type='Oil Change')
+    client.force_login(customer)
+
+    response = client.get(reverse('booking_list'))
+
+    assert list(response.context['bookings']) == [mine]
+    assert 'Brake Repair' not in response.content.decode()
+    assert response.context['page_title'] == 'My bookings'
+    assert client.get(reverse('booking_detail', kwargs={'pk': theirs.pk})).status_code == 404
+
+
+def test_customer_cannot_touch_someone_elses_booking(client, customer, make_user, make_vehicle, make_booking):
+    other = make_user('sam')
+    theirs = make_booking(other, make_vehicle(other, plate='SAM111'))
+    client.force_login(customer)
+
+    assert client.get(reverse('booking_edit', kwargs={'pk': theirs.pk})).status_code == 404
+    assert client.get(reverse('booking_cancel', kwargs={'pk': theirs.pk})).status_code == 404
+    assert client.post(reverse('booking_cancel', kwargs={'pk': theirs.pk})).status_code == 404
+    theirs.refresh_from_db()
+    assert theirs.status == 'PENDING'
+
+
+def test_mechanic_only_sees_bookings_assigned_to_them(client, mechanic, make_user, customer, vehicle, make_booking):
+    other_mechanic = make_user('mechanic2', User.Role.MECHANIC)
+    assigned = make_booking(customer, vehicle, mechanic=mechanic)
+    elsewhere = make_booking(customer, vehicle, mechanic=other_mechanic, time=datetime.time(11, 0))
+    unassigned = make_booking(customer, vehicle, time=datetime.time(12, 0))
+    client.force_login(mechanic)
+
+    response = client.get(reverse('booking_list'))
+
+    assert list(response.context['bookings']) == [assigned]
+    assert response.context['page_title'] == 'Assigned bookings'
+    assert client.get(reverse('booking_detail', kwargs={'pk': assigned.pk})).status_code == 200
+    assert client.get(reverse('booking_detail', kwargs={'pk': elsewhere.pk})).status_code == 404
+    assert client.get(reverse('booking_detail', kwargs={'pk': unassigned.pk})).status_code == 404
+
+
+def test_admin_sees_all_bookings_and_can_filter_by_status(client, admin_user, customer, vehicle, make_booking):
+    pending = make_booking(customer, vehicle)
+    confirmed = make_booking(customer, vehicle, time=datetime.time(11, 0), status='CONFIRMED')
+    client.force_login(admin_user)
+
+    everything = client.get(reverse('booking_list'))
+    only_confirmed = client.get(reverse('booking_list') + '?status=CONFIRMED')
+    nonsense = client.get(reverse('booking_list') + '?status=NOPE')
+
+    assert set(everything.context['bookings']) == {pending, confirmed}
+    assert list(only_confirmed.context['bookings']) == [confirmed]
+    assert set(nonsense.context['bookings']) == {pending, confirmed}  # unknown filter is ignored
+    assert everything.context['page_title'] == 'All bookings'
+
+
+# ---------------------------------------------------------------- customer creates a booking
+
+
+def test_customer_without_a_vehicle_is_sent_to_add_one(client, customer):
+    client.force_login(customer)
+
+    response = client.get(reverse('create_booking'))
+
+    assert response.status_code == 302
+    assert response.url == reverse('vehicles:create')
+
+
+def test_create_booking_page_loads_and_preselects_vehicle(client, customer, vehicle):
+    client.force_login(customer)
+
+    response = client.get(reverse('create_booking') + f'?vehicle={vehicle.pk}')
+
+    assert response.status_code == 200
+    assert response.context['form']['vehicle'].value() == str(vehicle.pk)
+    assert 'bookings/create_booking.html' in names(response)
+
+
+def test_customer_creates_pending_booking_for_themselves(client, customer, vehicle, booking_data):
+    client.force_login(customer)
+
+    response = client.post(reverse('create_booking'), booking_data(vehicle, notes='Squeaky brakes'))
+
+    booking = Booking.objects.get()
+    assert response.status_code == 302
+    assert response.url == reverse('booking_detail', kwargs={'pk': booking.pk})
+    assert booking.customer == customer
+    assert booking.vehicle == vehicle
+    assert booking.status == 'PENDING'
+    assert booking.mechanic is None
+    assert booking.booking_time == datetime.time(10, 0)
+
+
+def test_customer_cannot_set_status_mechanic_or_customer(client, customer, vehicle, mechanic, make_user, booking_data):
+    other = make_user('sam')
+    client.force_login(customer)
+
+    client.post(reverse('create_booking'), booking_data(
+        vehicle, status='CONFIRMED', mechanic=mechanic.pk, customer=other.pk,
+    ))
+
+    booking = Booking.objects.get()
+    assert booking.status == 'PENDING'
+    assert booking.mechanic is None
+    assert booking.customer == customer
+
+
+def test_customer_cannot_book_someone_elses_vehicle(client, customer, vehicle, make_user, make_vehicle, booking_data):
+    other = make_user('sam')
+    theirs = make_vehicle(other, plate='SAM111')
+    client.force_login(customer)
+
+    response = client.post(reverse('create_booking'), booking_data(theirs))
+
+    assert response.status_code == 200
+    assert 'vehicle' in response.context['form'].errors
+    assert not Booking.objects.exists()
+
+
+def test_other_service_is_saved_as_the_service(client, customer, vehicle, booking_data):
+    client.force_login(customer)
+
+    client.post(reverse('create_booking'), booking_data(vehicle, service_type='Other', other_service='Air con regas'))
+
+    assert Booking.objects.get().service_type == 'Air con regas'
+
+
+def test_invalid_booking_shows_errors_and_saves_nothing(client, customer, vehicle, booking_data):
+    client.force_login(customer)
+
+    response = client.post(reverse('create_booking'), booking_data(vehicle, booking_time='', service_type=''))
+
+    assert response.status_code == 200
+    assert {'booking_time', 'service_type'} <= set(response.context['form'].errors)
+    assert 'id="form-errors"' in response.content.decode()
+    assert not Booking.objects.exists()
+
+
+# ---------------------------------------------------------------- edit
+
+
+def test_customer_can_edit_their_upcoming_booking(client, customer, vehicle, make_booking, booking_data):
+    booking = make_booking(customer, vehicle)
+    client.force_login(customer)
+
+    page = client.get(reverse('booking_edit', kwargs={'pk': booking.pk}))
+    assert page.status_code == 200
+    assert page.context['form']['booking_time'].value() == '10:00'  # saved time is preselected
+
+    response = client.post(
+        reverse('booking_edit', kwargs={'pk': booking.pk}),
+        booking_data(vehicle, booking_time='14:00', notes='Moved to the afternoon'),
+    )
+
+    assert response.status_code == 302
+    booking.refresh_from_db()
+    assert booking.booking_time == datetime.time(14, 0)
+    assert booking.notes == 'Moved to the afternoon'
+    assert booking.customer == customer
+
+
+def test_editing_a_custom_service_shows_it_as_other(client, customer, vehicle, make_booking):
+    booking = make_booking(customer, vehicle, service_type='Air con regas')
+    client.force_login(customer)
+
+    form = client.get(reverse('booking_edit', kwargs={'pk': booking.pk})).context['form']
+
+    assert form['service_type'].value() == 'Other'
+    assert form['other_service'].value() == 'Air con regas'
+
+
+def test_customer_cannot_edit_a_booking_that_has_started(client, customer, vehicle, make_booking, open_day):
+    booking = make_booking(customer, vehicle)
+    client.force_login(customer)
+
+    with frozen_now(open_day, 11):  # the 10:00 booking is already under way
+        assert client.get(reverse('booking_edit', kwargs={'pk': booking.pk})).status_code == 403
+
+
+def test_customer_cannot_edit_a_cancelled_booking(client, customer, vehicle, make_booking):
+    booking = make_booking(customer, vehicle, status='CANCELLED')
+    client.force_login(customer)
+
+    assert client.get(reverse('booking_edit', kwargs={'pk': booking.pk})).status_code == 403
+
+
+# ---------------------------------------------------------------- cancel and delete
+
+
+def test_customer_cancels_booking_and_it_is_kept(client, customer, vehicle, make_booking):
+    booking = make_booking(customer, vehicle)
+    client.force_login(customer)
+    url = reverse('booking_cancel', kwargs={'pk': booking.pk})
+
+    assert client.get(url).status_code == 200  # confirmation page, nothing changed yet
+    booking.refresh_from_db()
+    assert booking.status == 'PENDING'
+
+    response = client.post(url)
+
+    assert response.status_code == 302
+    assert response.url == reverse('booking_list')
+    booking.refresh_from_db()
+    assert booking.status == 'CANCELLED'
+
+
+def test_cancelled_booking_cannot_be_cancelled_again(client, customer, vehicle, make_booking):
+    booking = make_booking(customer, vehicle, status='CANCELLED')
+    client.force_login(customer)
+
+    assert client.post(reverse('booking_cancel', kwargs={'pk': booking.pk})).status_code == 403
+
+
+def test_customer_cannot_cancel_after_the_booking_has_started(client, customer, vehicle, make_booking, open_day):
+    booking = make_booking(customer, vehicle)
+    client.force_login(customer)
+
+    with frozen_now(open_day, 11):
+        assert client.post(reverse('booking_cancel', kwargs={'pk': booking.pk})).status_code == 403
+    booking.refresh_from_db()
+    assert booking.status == 'PENDING'
+
+
+def test_admin_can_delete_a_booking(client, admin_user, customer, vehicle, make_booking):
+    booking = make_booking(customer, vehicle)
+    client.force_login(admin_user)
+    url = reverse('booking_delete', kwargs={'pk': booking.pk})
+
+    assert client.get(url).status_code == 200
+    response = client.post(url)
+
+    assert response.status_code == 302
+    assert not Booking.objects.exists()
+
+
+# ---------------------------------------------------------------- admin
+
+
+def test_admin_can_book_on_behalf_of_a_customer(client, admin_user, customer, vehicle, mechanic, booking_data):
+    client.force_login(admin_user)
+
+    response = client.post(reverse('create_booking'), booking_data(
+        vehicle, customer=customer.pk, mechanic=mechanic.pk, status='CONFIRMED',
+    ))
+
+    assert response.status_code == 302
+    booking = Booking.objects.get()
+    assert (booking.customer, booking.vehicle, booking.mechanic, booking.status) == (
+        customer, vehicle, mechanic, 'CONFIRMED')
+
+
+def test_admin_cannot_pair_a_customer_with_another_customers_vehicle(
+        client, admin_user, customer, vehicle, make_user, booking_data):
+    other = make_user('sam')
+    client.force_login(admin_user)
+
+    response = client.post(reverse('create_booking'), booking_data(vehicle, customer=other.pk, status='PENDING'))
+
+    assert response.status_code == 200
+    assert 'different customer' in response.context['form'].errors['vehicle'][0]
+    assert not Booking.objects.exists()
+
+
+def test_admin_form_only_offers_customers_and_mechanics(client, admin_user, customer, mechanic):
+    client.force_login(admin_user)
+
+    form = client.get(reverse('create_booking')).context['form']
+
+    assert set(form.fields['customer'].queryset) == {customer}
+    assert set(form.fields['mechanic'].queryset) == {mechanic}
+
+
+def test_admin_assigns_mechanic_and_confirms_booking(client, admin_user, customer, vehicle, mechanic, make_booking, booking_data):
+    booking = make_booking(customer, vehicle)
+    client.force_login(admin_user)
+
+    response = client.post(
+        reverse('booking_edit', kwargs={'pk': booking.pk}),
+        booking_data(vehicle, customer=customer.pk, mechanic=mechanic.pk, status='CONFIRMED'),
+    )
+
+    assert response.status_code == 302
+    booking.refresh_from_db()
+    assert booking.mechanic == mechanic
+    assert booking.status == 'CONFIRMED'
+
+
+def test_admin_can_complete_a_booking_whose_date_has_passed(client, admin_user, customer, vehicle, mechanic, make_booking, booking_data, open_day):
+    booking = make_booking(customer, vehicle, status='CONFIRMED', mechanic=mechanic)
+    client.force_login(admin_user)
+
+    with frozen_now(open_day + datetime.timedelta(days=3), 9):  # the booking is now in the past
+        response = client.post(
+            reverse('booking_edit', kwargs={'pk': booking.pk}),
+            booking_data(vehicle, customer=customer.pk, mechanic=mechanic.pk, status='COMPLETED'),
+        )
+
+    assert response.status_code == 302
+    booking.refresh_from_db()
+    assert booking.status == 'COMPLETED'
+
+
+# ---------------------------------------------------------------- pages
+
+
+def test_detail_page_shows_actions_only_when_allowed(client, customer, vehicle, make_booking):
+    upcoming = make_booking(customer, vehicle)
+    done = make_booking(customer, vehicle, time=datetime.time(11, 0), status='COMPLETED')
+    client.force_login(customer)
+
+    upcoming_page = client.get(reverse('booking_detail', kwargs={'pk': upcoming.pk})).content.decode()
+    done_page = client.get(reverse('booking_detail', kwargs={'pk': done.pk})).content.decode()
+
+    assert reverse('booking_edit', kwargs={'pk': upcoming.pk}) in upcoming_page
+    assert reverse('booking_cancel', kwargs={'pk': upcoming.pk}) in upcoming_page
+    assert reverse('booking_delete', kwargs={'pk': upcoming.pk}) not in upcoming_page  # admins only
+    assert reverse('booking_edit', kwargs={'pk': done.pk}) not in done_page
+    assert reverse('booking_cancel', kwargs={'pk': done.pk}) not in done_page
+
+
+def test_navbar_links_depend_on_role(client, customer, mechanic, admin_user):
+    def navbar_for(user):
+        client.force_login(user)
+        return client.get(reverse('dashboard'), follow=True).content.decode()
+
+    customer_page = navbar_for(customer)
+    assert reverse('vehicles:list') in customer_page and reverse('booking_list') in customer_page
+
+    mechanic_page = navbar_for(mechanic)
+    assert reverse('booking_list') in mechanic_page and reverse('vehicles:list') not in mechanic_page
+
+    admin_page = navbar_for(admin_user)
+    assert reverse('vehicles:list') in admin_page and reverse('booking_list') in admin_page
+
+
+# ---------------------------------------------------------------- admin: vehicle follows the selected customer
+
+
+def test_admin_vehicle_options_are_tagged_with_their_owner(
+        client, admin_user, customer, vehicle, make_user, make_vehicle):
+    other = make_user('sam')
+    theirs = make_vehicle(other, plate='SAM111')
+    client.force_login(admin_user)
+
+    body = client.get(reverse('create_booking')).content.decode()
+
+    # The page's script uses data-owner to list only the selected customer's vehicles.
+    assert f'<option value="{vehicle.pk}" data-owner="{customer.pk}">' in body
+    assert f'<option value="{theirs.pk}" data-owner="{other.pk}">' in body
+
+
+def test_customer_form_has_no_owner_tags_or_customer_field(client, customer, vehicle):
+    client.force_login(customer)
+
+    response = client.get(reverse('create_booking'))
+
+    assert 'customer' not in response.context['form'].fields
+    assert ' data-owner="' not in response.content.decode()  # no option carries an owner tag
+
+
+def test_admin_booking_from_a_vehicle_page_preselects_its_owner(client, admin_user, customer, vehicle):
+    client.force_login(admin_user)
+
+    form = client.get(reverse('create_booking') + f'?vehicle={vehicle.pk}').context['form']
+
+    assert str(form['customer'].value()) == str(customer.pk)
+    assert str(form['vehicle'].value()) == str(vehicle.pk)
+
+
+def test_admin_cannot_book_a_vehicle_that_is_not_the_selected_customers(
+        client, admin_user, customer, vehicle, make_user, make_vehicle, booking_data):
+    other = make_user('sam')
+    theirs = make_vehicle(other, plate='SAM111')
+    client.force_login(admin_user)
+
+    # Customer is casey, but the vehicle belongs to sam (for example, if the page's script is off).
+    response = client.post(reverse('create_booking'), booking_data(theirs, customer=customer.pk, status='PENDING'))
+
+    assert response.status_code == 200
+    assert 'belongs to a different customer' in response.context['form'].errors['vehicle'][0]
+    assert not Booking.objects.exists()
+
+
+def test_admin_edit_form_starts_with_the_bookings_customer_selected(client, admin_user, customer, vehicle, make_booking):
+    booking = make_booking(customer, vehicle)
+    client.force_login(admin_user)
+
+    form = client.get(reverse('booking_edit', kwargs={'pk': booking.pk})).context['form']
+
+    assert form['customer'].value() == customer.pk
+    assert form['vehicle'].value() == vehicle.pk

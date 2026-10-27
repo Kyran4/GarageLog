@@ -154,6 +154,6 @@ MESSAGE_TAGS = {messages.ERROR: 'danger'}
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
 
 EMAIL_BACKEND = os.getenv(
-    'EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend'
+    'EMAIL_BACKEND', 'accounts.console_email.ReadableConsoleEmailBackend'
 )
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'GarageLog <noreply@garagelog.local>')

@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+
+{% block title %}Cancel booking #{{ booking.pk }} | GarageLog{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <h1 class="h2 mb-3">Cancel this booking?</h1>
+        <p>{{ booking.service_type }} on {{ booking.booking_date|date:"l j F Y" }} at {{ booking.booking_time|time:"g:i a" }}{% if booking.vehicle %} for {{ booking.vehicle.plate }}{% endif %}. The time becomes available to other customers.</p>
+        <form method="post">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-warning">Yes, cancel the booking</button>
+            <a class="btn btn-link" href="{% url 'booking_detail' booking.pk %}">No, keep it</a>
+        </form>
+    </div>
+</div>
+{% endblock %}

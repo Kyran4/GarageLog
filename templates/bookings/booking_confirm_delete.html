@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+
+{% block title %}Delete booking #{{ booking.pk }} | GarageLog{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <h1 class="h2 mb-3">Delete booking #{{ booking.pk }}?</h1>
+        <p>This permanently removes the booking from GarageLog and from the vehicle's service history. To keep the record, cancel the booking instead.</p>
+        <form method="post">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">Yes, delete it</button>
+            <a class="btn btn-link" href="{% url 'booking_detail' booking.pk %}">No, keep it</a>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,6 +1,11 @@
+import datetime
+
 import pytest
 
 from accounts.models import User
+from bookings import scheduling
+from bookings.models import Booking
+from vehicles.models import Vehicle
 
 PASSWORD = 'S3cure-Pass-Word!'
 
@@ -47,3 +52,55 @@ def mechanic(make_user):
 @pytest.fixture
 def admin_user(make_user):
     return make_user('adminuser', User.Role.ADMIN)
+
+
+@pytest.fixture
+def make_vehicle(db):
+    def _make(owner, plate='ABC123', **extra):
+        fields = {'make': 'Toyota', 'model': 'Corolla', 'year': 2015}
+        fields.update(extra)
+        return Vehicle.objects.create(owner=owner, plate=plate, **fields)
+
+    return _make
+
+
+@pytest.fixture
+def vehicle(customer, make_vehicle):
+    return make_vehicle(customer)
+
+
+@pytest.fixture
+def open_day():
+    """A weekday at least a day from now, so bookings on it are valid."""
+    return scheduling.next_open_date()
+
+
+@pytest.fixture
+def make_booking(db, open_day):
+    def _make(customer, vehicle=None, date=None, time=datetime.time(10, 0), status='PENDING', mechanic=None, **extra):
+        fields = {'service_type': 'Oil Change'}
+        fields.update(extra)
+        return Booking.objects.create(
+            customer=customer, vehicle=vehicle, booking_date=date or open_day,
+            booking_time=time, status=status, mechanic=mechanic, **fields,
+        )
+
+    return _make
+
+
+@pytest.fixture
+def booking_data(open_day):
+    """POST data for a valid booking form; override any field with keyword arguments."""
+
+    def _data(vehicle, **overrides):
+        data = {
+            'vehicle': vehicle.pk,
+            'booking_date': open_day.isoformat(),
+            'booking_time': '10:00',
+            'service_type': 'Oil Change',
+            'notes': '',
+        }
+        data.update(overrides)
+        return data
+
+    return _data
