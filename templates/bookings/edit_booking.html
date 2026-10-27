@@ -1,0 +1,72 @@
+﻿{% extends "base.html" %}
+
+{% block content %}
+
+<h2>Edit Booking</h2>
+
+<p>Update your booking details below.</p>
+
+<form method="POST">
+    {% csrf_token %}
+
+    {{ form.non_field_errors }}
+
+    <p>
+        {{ form.booking_date.label_tag }}
+        {{ form.booking_date }}
+        {{ form.booking_date.errors }}
+    </p>
+
+    <p>
+        {{ form.booking_time.label_tag }}
+        {{ form.booking_time }}
+        {{ form.booking_time.errors }}
+    </p>
+
+    <p>
+        {{ form.service_type.label_tag }}
+        {{ form.service_type }}
+        {{ form.service_type.errors }}
+    </p>
+
+    <p id="other-service-container" hidden>
+        {{ form.other_service.label_tag }}
+        {{ form.other_service }}
+        {{ form.other_service.errors }}
+    </p>
+
+    <p>
+        {{ form.notes.label_tag }}
+        {{ form.notes }}
+        {{ form.notes.errors }}
+    </p>
+
+    <button type="submit">Save Changes</button>
+</form>
+
+<p>
+    <a href="{% url 'booking_list' %}">
+        Back to My Bookings
+    </a>
+</p>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const serviceSelect = document.getElementById("id_service_type");
+        const otherContainer = document.getElementById("other-service-container");
+        const otherInput = document.getElementById("id_other_service");
+
+        function toggleOtherService() {
+            const isOther = serviceSelect.value === "Other";
+
+            otherContainer.hidden = !isOther;
+            otherInput.required = isOther;
+        }
+
+        serviceSelect.addEventListener("change", toggleOtherService);
+
+        toggleOtherService();
+    });
+</script>
+
+{% endblock %}

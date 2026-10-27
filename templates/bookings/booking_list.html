@@ -19,6 +19,29 @@
     <p>Time: {{ booking.booking_time }}</p>
     <p>Status: {{ booking.get_status_display }}</p>
     <p>Notes: {{ booking.notes }}</p>
+    {% if booking.status != "CANCELLED" and booking.status != "COMPLETED" %}
+    <a href="{% url 'edit_booking' booking.id %}"
+       style="display: inline-block; padding: 2px 6px;
+          border: 2px outset ButtonBorder;
+          background: ButtonFace; color: ButtonText;
+          text-decoration: none; font: 13.3333px Arial;">
+        Edit Booking
+    </a>
+    {% endif %}
+
+    {% if booking.status != "CANCELLED" and booking.status != "COMPLETED" %}
+    <form method="POST"
+          action="{% url 'cancel_booking' booking.id %}"
+          onsubmit="return confirm('Are you sure you want to cancel this booking?');">
+
+        {% csrf_token %}
+
+        <button type="submit">
+            Cancel Booking
+        </button>
+    </form>
+    {% endif %}
+
 </div>
 
 <hr>

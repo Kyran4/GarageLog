@@ -44,8 +44,15 @@ class BookingForm(forms.ModelForm):
             "booking_date": forms.DateInput(
                 attrs={"type": "date"}
             ),
-            "booking_time": forms.TimeInput(
-                attrs={"type": "time"}
+            "booking_time": forms.Select(
+                choices=[
+                (
+                    f"{hour:02d}:{minute:02d}",
+                    f"{(hour % 12) or 12}:{minute:02d} {'AM' if hour < 12 else 'PM'}"
+                )
+                for hour in range(8, 18)
+                for minute in (0, 30)
+                ]
             ),
             "notes": forms.Textarea(
                 attrs={"rows": 3}
