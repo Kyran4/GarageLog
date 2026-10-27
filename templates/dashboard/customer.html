@@ -3,11 +3,48 @@
 {% block title %}Customer dashboard | GarageLog{% endblock %}
 
 {% block content %}
-<h1 class="h2">Welcome, {{ user.first_name|default:user.username }}</h1>
-<p class="text-body-secondary">Customer dashboard</p>
-<div class="row g-3">
-    {% include 'dashboard/_placeholder_card.html' with slug='vehicles' title='My vehicles' text='Add your vehicles and keep track of WOF and registration dates.' %}
-    {% include 'dashboard/_placeholder_card.html' with slug='bookings' title='My bookings' text='Book a service and see your upcoming appointments.' %}
-    {% include 'dashboard/_placeholder_card.html' with slug='history' title='Service history' text='See everything that has been done on each of your vehicles.' %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-1">
+    <h1 class="h2 mb-0">Welcome, {{ user.first_name|default:user.username }}</h1>
+    <a class="btn btn-primary" href="{% url 'create_booking' %}">Book a service</a>
 </div>
+<p class="text-body-secondary">Customer dashboard</p>
+
+<div class="row g-3 mb-4">
+    {% include 'dashboard/_link_card.html' with slug='vehicles' title='My vehicles' count=vehicle_count text='Your vehicles and their WoF and registration dates.' url=vehicles_url link_text='View vehicles' %}
+    {% include 'dashboard/_link_card.html' with slug='bookings' title='Upcoming bookings' count=upcoming_count text='Services you have booked that have not happened yet.' url=bookings_url link_text='View bookings' %}
+    {% include 'dashboard/_placeholder_card.html' with slug='history' title='Service history' text='Everything done on each vehicle appears on its page.' %}
+</div>
+
+{% if expiring_vehicles %}
+<section aria-labelledby="expiry-heading" class="mb-4">
+    <h2 class="h5" id="expiry-heading">WoF and registration to check</h2>
+    <ul class="list-group">
+        {% for vehicle in expiring_vehicles %}
+        <li class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <a href="{% url 'vehicles:detail' vehicle.pk %}">{{ vehicle.plate }} ({{ vehicle.make }} {{ vehicle.model }})</a>
+            <span>
+                {% if vehicle.wof_status == 'expired' or vehicle.wof_status == 'soon' %}WoF: {% include 'includes/expiry.html' with date=vehicle.wof_expiry status=vehicle.wof_status %}{% endif %}
+                {% if vehicle.rego_status == 'expired' or vehicle.rego_status == 'soon' %} Registration: {% include 'includes/expiry.html' with date=vehicle.rego_expiry status=vehicle.rego_status %}{% endif %}
+            </span>
+        </li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}
+
+<section aria-labelledby="next-heading">
+    <h2 class="h5" id="next-heading">Next bookings</h2>
+    {% if next_bookings %}
+    <ul class="list-group">
+        {% for booking in next_bookings %}
+        <li class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <span><strong>{{ booking.booking_date|date:"D j M" }}</strong> at {{ booking.booking_time|time:"g:i a" }} &ndash; {{ booking.service_type }}{% if booking.vehicle %} ({{ booking.vehicle.plate }}){% endif %}</span>
+            <span>{% include 'includes/booking_status.html' with status=booking.status label=booking.get_status_display %} <a class="ms-2" href="{% url 'booking_detail' booking.pk %}">View<span class="visually-hidden"> booking #{{ booking.pk }}</span></a></span>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p>You have no upcoming bookings.</p>
+    {% endif %}
+</section>
 {% endblock %}

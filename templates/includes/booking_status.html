@@ -1,0 +1,2 @@
+{% comment %}Usage: {% include 'includes/booking_status.html' with status=booking.status label=booking.get_status_display %}{% endcomment %}
+<span class="badge {% if status == 'PENDING' %}text-bg-warning{% elif status == 'CONFIRMED' %}text-bg-success{% elif status == 'CANCELLED' %}text-bg-secondary{% else %}text-bg-primary{% endif %}">{{ label }}</span>

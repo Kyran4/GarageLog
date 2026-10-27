@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+
+{% block title %}Booking #{{ booking.pk }} | GarageLog{% endblock %}
+
+{% block content %}
+<nav aria-label="Breadcrumb"><a href="{% url 'booking_list' %}">&larr; Back to bookings</a></nav>
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 my-3">
+    <h1 class="h2 mb-0">Booking #{{ booking.pk }}</h1>
+    <div class="d-flex flex-wrap gap-2">
+        {% if can_edit %}<a class="btn btn-outline-primary" href="{% url 'booking_edit' booking.pk %}">Edit</a>{% endif %}
+        {% if can_cancel %}<a class="btn btn-outline-warning" href="{% url 'booking_cancel' booking.pk %}">Cancel booking</a>{% endif %}
+        {% if is_admin %}<a class="btn btn-outline-danger" href="{% url 'booking_delete' booking.pk %}">Delete</a>{% endif %}
+    </div>
+</div>
+
+<dl class="row">
+    <dt class="col-sm-3">Status</dt>
+    <dd class="col-sm-9">{% include 'includes/booking_status.html' with status=booking.status label=booking.get_status_display %}</dd>
+    <dt class="col-sm-3">Service</dt>
+    <dd class="col-sm-9">{{ booking.service_type }}</dd>
+    <dt class="col-sm-3">Date</dt>
+    <dd class="col-sm-9">{{ booking.booking_date|date:"l j F Y" }}</dd>
+    <dt class="col-sm-3">Time</dt>
+    <dd class="col-sm-9">{{ booking.booking_time|time:"g:i a" }} to {{ booking.end_time|time:"g:i a" }}</dd>
+    <dt class="col-sm-3">Vehicle</dt>
+    <dd class="col-sm-9">
+        {% if booking.vehicle %}
+            {% if can_see_vehicle_page %}<a href="{% url 'vehicles:detail' booking.vehicle.pk %}">{{ booking.vehicle }}</a>{% else %}{{ booking.vehicle }}{% endif %}
+        {% else %}<span class="text-body-secondary">Not recorded</span>{% endif %}
+    </dd>
+    {% if user != booking.customer %}
+    <dt class="col-sm-3">Customer</dt>
+    <dd class="col-sm-9">{{ booking.customer.get_full_name|default:booking.customer.username }}{% if booking.customer.phone %} &ndash; {{ booking.customer.phone }}{% endif %}</dd>
+    {% endif %}
+    <dt class="col-sm-3">Mechanic</dt>
+    <dd class="col-sm-9">{% if booking.mechanic %}{{ booking.mechanic.get_full_name|default:booking.mechanic.username }}{% else %}<span class="text-body-secondary">Not assigned yet</span>{% endif %}</dd>
+    <dt class="col-sm-3">Notes</dt>
+    <dd class="col-sm-9">{{ booking.notes|default:"-"|linebreaksbr }}</dd>
+</dl>
+{% endblock %}

@@ -26,7 +26,7 @@
 </head>
 <body>
     <a class="skip-link btn btn-light" href="#main-content">Skip to content</a>
-    {% with url_name=request.resolver_match.url_name %}
+    {% with url_name=request.resolver_match.url_name ns=request.resolver_match.namespace %}
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark" aria-label="Main navigation">
         <div class="container">
             <a class="navbar-brand" href="{% url 'home' %}">GarageLog</a>
@@ -41,6 +41,14 @@
                     {% if user.is_authenticated %}
                     <li class="nav-item">
                         <a class="nav-link{% if 'dashboard' in url_name %} active{% endif %}" {% if 'dashboard' in url_name %}aria-current="page"{% endif %} href="{% url 'dashboard' %}">Dashboard</a>
+                    </li>
+                    {% if user.is_customer or user.is_admin_role %}
+                    <li class="nav-item">
+                        <a class="nav-link{% if ns == 'vehicles' %} active{% endif %}" {% if ns == 'vehicles' %}aria-current="page"{% endif %} href="{% url 'vehicles:list' %}">Vehicles</a>
+                    </li>
+                    {% endif %}
+                    <li class="nav-item">
+                        <a class="nav-link{% if 'booking' in url_name %} active{% endif %}" {% if 'booking' in url_name %}aria-current="page"{% endif %} href="{% url 'booking_list' %}">Bookings</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link{% if url_name == 'profile' %} active{% endif %}" {% if url_name == 'profile' %}aria-current="page"{% endif %} href="{% url 'accounts:profile' %}">Profile</a>

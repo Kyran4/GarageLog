@@ -5,8 +5,25 @@
 {% block content %}
 <h1 class="h2">Welcome, {{ user.first_name|default:user.username }}</h1>
 <p class="text-body-secondary">Mechanic dashboard</p>
-<div class="row g-3">
-    {% include 'dashboard/_placeholder_card.html' with slug='assigned' title='Assigned bookings' text='Your bookings for today and the week ahead.' %}
+
+<div class="row g-3 mb-4">
+    {% include 'dashboard/_link_card.html' with slug='assigned' title='Upcoming assigned bookings' count=upcoming_count text='Bookings assigned to you that have not happened yet.' url=bookings_url link_text='View bookings' %}
     {% include 'dashboard/_placeholder_card.html' with slug='jobs' title='Job cards' text='Update job status, notes and parts used.' %}
 </div>
+
+<section aria-labelledby="next-heading">
+    <h2 class="h5" id="next-heading">Your next bookings</h2>
+    {% if next_bookings %}
+    <ul class="list-group">
+        {% for booking in next_bookings %}
+        <li class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <span><strong>{{ booking.booking_date|date:"D j M" }}</strong> at {{ booking.booking_time|time:"g:i a" }} &ndash; {{ booking.service_type }}{% if booking.vehicle %} ({{ booking.vehicle.plate }}){% endif %}</span>
+            <a href="{% url 'booking_detail' booking.pk %}">View<span class="visually-hidden"> booking #{{ booking.pk }}</span></a>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p>No bookings have been assigned to you yet.</p>
+    {% endif %}
+</section>
 {% endblock %}

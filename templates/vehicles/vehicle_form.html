@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if object %}Edit {{ object.plate }}{% else %}Add a vehicle{% endif %} | GarageLog{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <h1 class="h2 mb-3">{% if object %}Edit {{ object.plate }}{% else %}Add a vehicle{% endif %}</h1>
+        <form method="post" novalidate>
+            {% csrf_token %}
+            {% include 'includes/form.html' with form=form %}
+            <button type="submit" class="btn btn-primary">{% if object %}Save changes{% else %}Add vehicle{% endif %}</button>
+            <a class="btn btn-link" href="{% if object %}{% url 'vehicles:detail' object.pk %}{% else %}{% url 'vehicles:list' %}{% endif %}">Cancel</a>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,2 @@
+{% comment %}Usage: {% include 'includes/expiry.html' with date=vehicle.wof_expiry status=vehicle.wof_status %}{% endcomment %}
+{% if date %}{{ date|date:"j M Y" }}{% if status == 'expired' %} <span class="badge text-bg-danger">Expired</span>{% elif status == 'soon' %} <span class="badge text-bg-warning">Due soon</span>{% endif %}{% else %}<span class="text-body-secondary">Not set</span>{% endif %}

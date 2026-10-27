@@ -17,7 +17,9 @@
 </section>
 
 <div class="row g-3 mb-4">
-    {% include 'dashboard/_placeholder_card.html' with slug='bookings' title='Bookings' text='Manage all workshop bookings.' %}
+    {% include 'dashboard/_link_card.html' with slug='bookings' title='Bookings awaiting confirmation' count=pending_count text='Pending bookings that need confirming and a mechanic.' url=pending_url link_text='Review pending bookings' %}
+    {% include 'dashboard/_link_card.html' with slug='allbookings' title='Upcoming bookings' count=upcoming_count text='Active bookings that have not happened yet.' url=bookings_url link_text='View all bookings' %}
+    {% include 'dashboard/_link_card.html' with slug='vehicles' title='Vehicles' count=vehicle_count text='Vehicles registered with the workshop.' url=vehicles_url link_text='View vehicles' %}
     {% include 'dashboard/_placeholder_card.html' with slug='inventory' title='Parts inventory' text='Track stock and low-stock alerts.' %}
     {% include 'dashboard/_placeholder_card.html' with slug='analytics' title='Analytics' text='Bookings, revenue and upcoming expiries.' %}
 </div>

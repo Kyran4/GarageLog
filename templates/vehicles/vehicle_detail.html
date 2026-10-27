@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ vehicle.plate }} | GarageLog{% endblock %}
+
+{% block content %}
+<nav aria-label="Breadcrumb"><a href="{% url 'vehicles:list' %}">&larr; Back to vehicles</a></nav>
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 my-3">
+    <h1 class="h2 mb-0">{{ vehicle.plate }}</h1>
+    <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-primary" href="{% url 'create_booking' %}?vehicle={{ vehicle.pk }}">Book a service</a>
+        <a class="btn btn-outline-primary" href="{% url 'vehicles:edit' vehicle.pk %}">Edit</a>
+        <a class="btn btn-outline-danger" href="{% url 'vehicles:delete' vehicle.pk %}">Delete</a>
+    </div>
+</div>
+
+<dl class="row">
+    <dt class="col-sm-3">Vehicle</dt>
+    <dd class="col-sm-9">{{ vehicle.year }} {{ vehicle.make }} {{ vehicle.model }}</dd>
+    {% if user.is_admin_role %}
+    <dt class="col-sm-3">Owner</dt>
+    <dd class="col-sm-9">{{ vehicle.owner.get_full_name|default:vehicle.owner.username }} ({{ vehicle.owner.username }})</dd>
+    {% endif %}
+    <dt class="col-sm-3">WoF expiry</dt>
+    <dd class="col-sm-9">{% include 'includes/expiry.html' with date=vehicle.wof_expiry status=vehicle.wof_status %}</dd>
+    <dt class="col-sm-3">Registration expiry</dt>
+    <dd class="col-sm-9">{% include 'includes/expiry.html' with date=vehicle.rego_expiry status=vehicle.rego_status %}</dd>
+</dl>
+
+<section aria-labelledby="history-heading">
+    <h2 class="h4" id="history-heading">Service history</h2>
+    {% if history %}
+    <ol class="list-group list-group-flush">
+        {% for booking in history %}
+        <li class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <span>
+                <strong>{{ booking.booking_date|date:"j M Y" }}</strong> at {{ booking.booking_time|time:"g:i a" }}
+                &ndash; {{ booking.service_type }}
+            </span>
+            <span>
+                {% include 'includes/booking_status.html' with status=booking.status label=booking.get_status_display %}
+                <a class="ms-2" href="{% url 'booking_detail' booking.pk %}">View<span class="visually-hidden"> booking #{{ booking.pk }}</span></a>
+            </span>
+        </li>
+        {% endfor %}
+    </ol>
+    {% else %}
+    <p>No bookings for this vehicle yet.</p>
+    {% endif %}
+</section>
+{% endblock %}

@@ -1,7 +1,11 @@
+import datetime
+
 import pytest
 from django.urls import reverse
+from django.utils import timezone
 
 from accounts.models import User
+from bookings.tests import frozen_now
 
 pytestmark = pytest.mark.django_db
 
@@ -131,3 +135,79 @@ def test_skip_link_and_main_landmark_present(client, db):
     body = client.get(reverse('home')).content.decode()
     assert 'href="#main-content"' in body
     assert 'id="main-content"' in body
+
+
+# ---------------------------------------------------------------- live dashboard data
+
+
+def test_customer_dashboard_counts_vehicles_and_upcoming_bookings(client, customer, vehicle, make_booking, open_day):
+    make_booking(customer, vehicle)
+    make_booking(customer, vehicle, time=datetime.time(11, 0), status='CANCELLED')  # not upcoming
+    client.force_login(customer)
+
+    response = client.get(reverse('customer_dashboard'))
+
+    assert response.context['vehicle_count'] == 1
+    assert response.context['upcoming_count'] == 1
+    assert len(response.context['next_bookings']) == 1
+    body = response.content.decode()
+    assert reverse('vehicles:list') in body and reverse('booking_list') in body
+    assert reverse('create_booking') in body
+
+
+def test_customer_dashboard_ignores_bookings_that_already_happened(client, customer, vehicle, make_booking, open_day):
+    make_booking(customer, vehicle)
+    client.force_login(customer)
+
+    with frozen_now(open_day, 13):  # the 10:00 booking has passed
+        response = client.get(reverse('customer_dashboard'))
+
+    assert response.context['upcoming_count'] == 0
+    assert 'You have no upcoming bookings' in response.content.decode()
+
+
+def test_customer_dashboard_only_counts_their_own_data(client, customer, vehicle, make_user, make_vehicle, make_booking):
+    other = make_user('sam')
+    make_booking(other, make_vehicle(other, plate='SAM111'))
+    client.force_login(customer)
+
+    response = client.get(reverse('customer_dashboard'))
+
+    assert response.context['vehicle_count'] == 1
+    assert response.context['upcoming_count'] == 0
+
+
+def test_customer_dashboard_flags_expiring_wof_and_rego(client, customer, make_vehicle):
+    today = timezone.localdate()
+    make_vehicle(customer, plate='SOON1', wof_expiry=today + datetime.timedelta(days=5))
+    make_vehicle(customer, plate='FINE1', wof_expiry=today + datetime.timedelta(days=200))
+    client.force_login(customer)
+
+    response = client.get(reverse('customer_dashboard'))
+
+    assert [v.plate for v in response.context['expiring_vehicles']] == ['SOON1']
+
+
+def test_mechanic_dashboard_shows_only_assigned_bookings(client, mechanic, make_user, customer, vehicle, make_booking):
+    other_mechanic = make_user('mechanic2', User.Role.MECHANIC)
+    make_booking(customer, vehicle, mechanic=mechanic)
+    make_booking(customer, vehicle, mechanic=other_mechanic, time=datetime.time(11, 0))
+    client.force_login(mechanic)
+
+    response = client.get(reverse('mechanic_dashboard'))
+
+    assert response.context['upcoming_count'] == 1
+    assert [b.mechanic for b in response.context['next_bookings']] == [mechanic]
+
+
+def test_admin_dashboard_shows_pending_upcoming_and_vehicle_counts(client, admin_user, customer, vehicle, make_booking):
+    make_booking(customer, vehicle)
+    make_booking(customer, vehicle, time=datetime.time(11, 0), status='CONFIRMED')
+    client.force_login(admin_user)
+
+    response = client.get(reverse('admin_dashboard'))
+
+    assert response.context['pending_count'] == 1
+    assert response.context['upcoming_count'] == 2
+    assert response.context['vehicle_count'] == 1
+    assert '?status=PENDING' in response.content.decode()
