@@ -188,16 +188,35 @@ def test_customer_dashboard_flags_expiring_wof_and_rego(client, customer, make_v
     assert [v.plate for v in response.context['expiring_vehicles']] == ['SOON1']
 
 
-def test_mechanic_dashboard_shows_only_assigned_bookings(client, mechanic, make_user, customer, vehicle, make_booking):
-    other_mechanic = make_user('mechanic2', User.Role.MECHANIC)
+def test_mechanic_dashboard_shows_the_workshops_bookings_and_which_are_theirs(
+        client, mechanic, make_user, other_workshop, customer, vehicle, make_vehicle, make_booking):
+    colleague = make_user('colleague', User.Role.MECHANIC)
     make_booking(customer, vehicle, mechanic=mechanic)
-    make_booking(customer, vehicle, mechanic=other_mechanic, time=datetime.time(11, 0))
+    make_booking(customer, vehicle, mechanic=colleague, time=datetime.time(11, 0))
+    make_booking(customer, make_vehicle(customer, plate='NORTH01'), workshop=other_workshop)  # not this workshop
     client.force_login(mechanic)
 
     response = client.get(reverse('mechanic_dashboard'))
 
-    assert response.context['upcoming_count'] == 1
-    assert [b.mechanic for b in response.context['next_bookings']] == [mechanic]
+    assert response.context['workshop'].name == 'Central Workshop'
+    assert response.context['upcoming_count'] == 2
+    assert response.context['assigned_count'] == 1
+    assert len(response.context['next_bookings']) == 2
+    assert 'Central Workshop' in response.content.decode()
+    assert reverse('vehicles:list') in response.content.decode()
+
+
+def test_mechanic_without_a_workshop_is_told_to_ask_an_admin(client, make_user):
+    drifter = make_user('drifter', User.Role.MECHANIC)
+    drifter.workshop = None
+    drifter.save()
+    client.force_login(drifter)
+
+    response = client.get(reverse('mechanic_dashboard'))
+
+    assert response.status_code == 200
+    assert "aren't assigned to a workshop" in response.content.decode()
+    assert response.context['upcoming_count'] == 0
 
 
 def test_admin_dashboard_shows_pending_upcoming_and_vehicle_counts(client, admin_user, customer, vehicle, make_booking):
@@ -211,3 +230,25 @@ def test_admin_dashboard_shows_pending_upcoming_and_vehicle_counts(client, admin
     assert response.context['upcoming_count'] == 2
     assert response.context['vehicle_count'] == 1
     assert '?status=PENDING' in response.content.decode()
+
+
+def test_admin_dashboard_summarises_each_workshop(client, admin_user, make_user, workshop, other_workshop, customer, vehicle, make_booking):
+    make_user('m1', User.Role.MECHANIC)
+    make_user('m2', User.Role.MECHANIC)
+    make_booking(customer, vehicle)
+    client.force_login(admin_user)
+
+    response = client.get(reverse('admin_dashboard'))
+
+    rows = {row['workshop'].name: row for row in response.context['workshop_rows']}
+    assert rows['Central Workshop']['mechanics'] == 2
+    assert rows['Central Workshop']['upcoming'] == 1
+    assert rows['North Workshop']['mechanics'] == 0
+    assert rows['North Workshop']['upcoming'] == 0
+    assert response.context['workshop_count'] == 2
+
+
+def test_admin_user_table_shows_each_mechanics_workshop(client, admin_user, mechanic):
+    client.force_login(admin_user)
+    body = client.get(reverse('admin_dashboard')).content.decode()
+    assert 'Central Workshop' in body

@@ -1,6 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
-from django.db.models import Count
+from django.db.models import Count, F, Q
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -8,7 +8,9 @@ from django.views.generic import ListView, TemplateView
 
 from accounts.mixins import AdminRequiredMixin, CustomerRequiredMixin, MechanicRequiredMixin
 from bookings.models import Booking
+from inventory.models import Part, StockItem
 from vehicles.models import Vehicle
+from workshops.models import Workshop
 
 User = get_user_model()
 
@@ -33,7 +35,7 @@ def upcoming_bookings(**filters):
     today = timezone.localdate()
     bookings = Booking.objects.filter(
         status__in=Booking.ACTIVE_STATUSES, booking_date__gte=today, **filters,
-    ).select_related('vehicle').order_by('booking_date', 'booking_time')
+    ).select_related('vehicle', 'workshop', 'mechanic').order_by('booking_date', 'booking_time')
     # Bookings earlier today whose time has passed are not upcoming any more.
     return [booking for booking in bookings if booking.is_upcoming]
 
@@ -63,10 +65,20 @@ class MechanicDashboardView(MechanicRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        upcoming = upcoming_bookings(mechanic=self.request.user)
+        user = self.request.user
+        # A mechanic works with the bookings at their own workshop.
+        upcoming = upcoming_bookings(workshop_id=user.workshop_id) if user.workshop_id else []
+        context['workshop'] = user.workshop
         context['upcoming_count'] = len(upcoming)
+        context['assigned_count'] = len([booking for booking in upcoming if booking.mechanic_id == user.pk])
         context['next_bookings'] = upcoming[:5]
         context['bookings_url'] = reverse('booking_list')
+        context['vehicles_url'] = reverse('vehicles:list')
+        context['low_stock_count'] = StockItem.objects.filter(
+            workshop_id=user.workshop_id, quantity__lte=F('reorder_level'),
+        ).count() if user.workshop_id else 0
+        context['parts_url'] = reverse('inventory:search')
+        context['low_stock_url'] = reverse('inventory:stock') + '?low=1'
         return context
 
 
@@ -79,6 +91,9 @@ class AdminDashboardView(AdminRequiredMixin, ListView):
     paginate_by = 20
     ordering = ('-date_joined', '-pk')
 
+    def get_queryset(self):
+        return super().get_queryset().select_related('workshop')
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         counts = dict(User.objects.values_list('role').annotate(total=Count('pk')))
@@ -89,6 +104,23 @@ class AdminDashboardView(AdminRequiredMixin, ListView):
         context['pending_count'] = Booking.objects.filter(status='PENDING').count()
         context['upcoming_count'] = len(upcoming_bookings())
         context['vehicle_count'] = Vehicle.objects.count()
+
+        upcoming = upcoming_bookings()
+        workshops = Workshop.objects.annotate(
+            mechanic_count=Count('staff', filter=Q(staff__role=User.Role.MECHANIC, staff__is_active=True), distinct=True),
+        )
+        context['workshop_rows'] = [
+            {
+                'workshop': workshop,
+                'mechanics': workshop.mechanic_count,
+                'upcoming': len([booking for booking in upcoming if booking.workshop_id == workshop.pk]),
+            }
+            for workshop in workshops
+        ]
+        context['workshop_count'] = len(context['workshop_rows'])
+        context['workshops_admin_url'] = reverse('admin:workshops_workshop_changelist')
+        context['part_count'] = Part.objects.filter(is_active=True).count()
+        context['parts_url'] = reverse('inventory:search')
         context['bookings_url'] = reverse('booking_list')
         context['pending_url'] = reverse('booking_list') + '?status=PENDING'
         context['vehicles_url'] = reverse('vehicles:list')

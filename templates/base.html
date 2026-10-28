@@ -42,9 +42,14 @@
                     <li class="nav-item">
                         <a class="nav-link{% if 'dashboard' in url_name %} active{% endif %}" {% if 'dashboard' in url_name %}aria-current="page"{% endif %} href="{% url 'dashboard' %}">Dashboard</a>
                     </li>
-                    {% if user.is_customer or user.is_admin_role %}
+                    {% if user.is_customer or user.is_admin_role or user.is_mechanic %}
                     <li class="nav-item">
                         <a class="nav-link{% if ns == 'vehicles' %} active{% endif %}" {% if ns == 'vehicles' %}aria-current="page"{% endif %} href="{% url 'vehicles:list' %}">Vehicles</a>
+                    </li>
+                    {% endif %}
+                    {% if user.is_mechanic or user.is_admin_role %}
+                    <li class="nav-item">
+                        <a class="nav-link{% if ns == 'inventory' %} active{% endif %}" {% if ns == 'inventory' %}aria-current="page"{% endif %} href="{% url 'inventory:search' %}">Parts</a>
                     </li>
                     {% endif %}
                     <li class="nav-item">

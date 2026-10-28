@@ -22,10 +22,12 @@
     <dd class="col-sm-9">{{ booking.booking_date|date:"l j F Y" }}</dd>
     <dt class="col-sm-3">Time</dt>
     <dd class="col-sm-9">{{ booking.booking_time|time:"g:i a" }} to {{ booking.end_time|time:"g:i a" }}</dd>
+    <dt class="col-sm-3">Workshop</dt>
+    <dd class="col-sm-9">{{ booking.workshop.name }}{% if booking.workshop.address %}<br><span class="text-body-secondary">{{ booking.workshop.address }}{% if booking.workshop.phone %} &ndash; {{ booking.workshop.phone }}{% endif %}</span>{% endif %}</dd>
     <dt class="col-sm-3">Vehicle</dt>
     <dd class="col-sm-9">
         {% if booking.vehicle %}
-            {% if can_see_vehicle_page %}<a href="{% url 'vehicles:detail' booking.vehicle.pk %}">{{ booking.vehicle }}</a>{% else %}{{ booking.vehicle }}{% endif %}
+            <a href="{% url 'vehicles:detail' booking.vehicle.pk %}">{{ booking.vehicle }}</a>
         {% else %}<span class="text-body-secondary">Not recorded</span>{% endif %}
     </dd>
     {% if user != booking.customer %}

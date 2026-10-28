@@ -71,13 +71,17 @@ def test_anonymous_users_are_sent_to_login(client, vehicle, url_name, needs_pk):
 
 
 @pytest.mark.parametrize('url_name, needs_pk', [
-    ('vehicles:list', False), ('vehicles:create', False), ('vehicles:detail', True),
-    ('vehicles:edit', True), ('vehicles:delete', True),
+    ('vehicles:create', False), ('vehicles:edit', True), ('vehicles:delete', True),
 ])
-def test_mechanics_have_no_access(client, mechanic, vehicle, url_name, needs_pk):
+def test_mechanics_cannot_add_edit_or_delete_vehicles(client, mechanic, vehicle, url_name, needs_pk):
     client.force_login(mechanic)
     url = reverse(url_name, kwargs={'pk': vehicle.pk} if needs_pk else {})
+
     assert client.get(url).status_code == 403
+    assert client.post(url, {**VEHICLE_DATA, 'plate': vehicle.plate, 'make': 'Hacked'}).status_code == 403
+    vehicle.refresh_from_db()
+    assert vehicle.make == 'Toyota'
+
 
 
 def test_customer_only_sees_their_own_vehicles(client, customer, vehicle, make_user, make_vehicle):
@@ -283,3 +287,107 @@ def test_expiry_badges_are_shown(client, customer, make_vehicle):
 
     assert 'Expired' in body
     assert 'Due soon' in body
+
+
+
+# ---------------------------------------------------------------- mechanics: look up any vehicle by plate
+
+
+def test_mechanic_sees_a_search_prompt_not_every_vehicle(client, mechanic, vehicle):
+    client.force_login(mechanic)
+
+    response = client.get(reverse('vehicles:list'))
+
+    assert response.status_code == 200
+    assert list(response.context['vehicles']) == []
+    assert 'Enter at least two characters' in response.content.decode()
+    assert '>ABC123<' not in response.content.decode()  # the vehicle is not listed (only the placeholder text mentions a plate)
+
+
+def test_mechanic_search_needs_two_characters(client, mechanic, vehicle):
+    client.force_login(mechanic)
+    assert list(client.get(reverse('vehicles:list') + '?q=A').context['vehicles']) == []
+
+
+@pytest.mark.parametrize('query', ['ABC123', 'abc123', 'abc 123', 'ABC', 'c12'])
+def test_mechanic_finds_any_customers_vehicle_by_plate(client, mechanic, vehicle, query):
+    client.force_login(mechanic)
+
+    response = client.get(reverse('vehicles:list'), {'q': query})
+
+    assert list(response.context['vehicles']) == [vehicle]
+    assert vehicle.plate in response.content.decode()
+
+
+def test_mechanic_search_with_no_match_says_so(client, mechanic, vehicle):
+    client.force_login(mechanic)
+    body = client.get(reverse('vehicles:list') + '?q=ZZZ999').content.decode()
+    assert 'No vehicle in GarageLog matches' in body
+
+
+def test_mechanic_list_has_no_add_button(client, mechanic, vehicle):
+    client.force_login(mechanic)
+    assert reverse('vehicles:create') not in client.get(reverse('vehicles:list') + '?q=ABC').content.decode()
+
+
+def test_mechanic_can_read_a_vehicle_and_its_history_but_not_change_it(
+        client, mechanic, vehicle, customer, make_booking):
+    make_booking(customer, vehicle, status='COMPLETED', service_type='Oil Change')
+    client.force_login(mechanic)
+
+    response = client.get(reverse('vehicles:detail', kwargs={'pk': vehicle.pk}))
+
+    body = response.content.decode()
+    assert response.status_code == 200
+    assert 'Service history' in body and 'Oil Change' in body
+    assert reverse('vehicles:edit', kwargs={'pk': vehicle.pk}) not in body
+    assert reverse('vehicles:delete', kwargs={'pk': vehicle.pk}) not in body
+    assert f"{reverse('create_booking')}?vehicle={vehicle.pk}" in body  # but can book it for the owner
+
+
+def test_history_shows_every_workshop_but_links_only_to_the_mechanics_own(
+        client, mechanic, vehicle, customer, other_workshop, make_booking, open_day):
+    here = make_booking(customer, vehicle, service_type='Brake Repair')
+    there = make_booking(
+        customer, vehicle, workshop=other_workshop, service_type='Oil Change',
+        date=open_day + datetime.timedelta(days=7),
+    )
+    client.force_login(mechanic)
+
+    response = client.get(reverse('vehicles:detail', kwargs={'pk': vehicle.pk}))
+
+    body = response.content.decode()
+    assert 'Brake Repair' in body and 'Oil Change' in body
+    assert 'North Workshop' in body and 'Central Workshop' in body
+    assert reverse('booking_detail', kwargs={'pk': here.pk}) in body
+    assert reverse('booking_detail', kwargs={'pk': there.pk}) not in body  # a 404 for this mechanic
+
+
+def test_owner_contact_details_are_hidden_until_they_have_booked_at_the_mechanics_workshop(
+        client, mechanic, vehicle, customer, other_workshop, make_booking):
+    customer.phone = '021 555 0199'
+    customer.save()
+    client.force_login(mechanic)
+    url = reverse('vehicles:detail', kwargs={'pk': vehicle.pk})
+
+    never_booked = client.get(url).content.decode()
+    assert '021 555 0199' not in never_booked and customer.email not in never_booked
+    assert 'Contact details are shown once' in never_booked
+
+    make_booking(customer, vehicle, workshop=other_workshop)  # booked, but at a different workshop
+    assert '021 555 0199' not in client.get(url).content.decode()
+
+    make_booking(customer, vehicle, time=datetime.time(11, 0))  # now booked at this mechanic's workshop
+    body = client.get(url).content.decode()
+    assert '021 555 0199' in body and customer.email in body
+
+
+def test_admin_can_search_all_vehicles_by_plate(client, admin_user, vehicle, make_user, make_vehicle):
+    other = make_vehicle(make_user('sam'), plate='XYZ789')
+    client.force_login(admin_user)
+
+    everything = client.get(reverse('vehicles:list'))
+    filtered = client.get(reverse('vehicles:list') + '?q=xyz')
+
+    assert set(everything.context['vehicles']) == {vehicle, other}
+    assert list(filtered.context['vehicles']) == [other]

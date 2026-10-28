@@ -1,14 +1,27 @@
 {% extends 'base.html' %}
 
-{% block title %}{% if user.is_admin_role %}All vehicles{% else %}My vehicles{% endif %} | GarageLog{% endblock %}
+{% block title %}{% if is_mechanic %}Find a vehicle{% elif user.is_admin_role %}All vehicles{% else %}My vehicles{% endif %} | GarageLog{% endblock %}
 
 {% block content %}
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-    <h1 class="h2 mb-0">{% if user.is_admin_role %}All vehicles{% else %}My vehicles{% endif %}</h1>
-    <a class="btn btn-primary" href="{% url 'vehicles:create' %}">Add a vehicle</a>
+    <h1 class="h2 mb-0">{% if is_mechanic %}Find a vehicle{% elif user.is_admin_role %}All vehicles{% else %}My vehicles{% endif %}</h1>
+    {% if can_add %}<a class="btn btn-primary" href="{% url 'vehicles:create' %}">Add a vehicle</a>{% endif %}
 </div>
 
-{% if vehicles %}
+{% if can_search %}
+<form method="get" class="row g-2 align-items-end mb-3" role="search" aria-label="Search vehicles by number plate">
+    <div class="col-sm-6 col-md-4">
+        <label for="vehicle-search" class="form-label">Number plate</label>
+        <input type="search" id="vehicle-search" name="q" value="{{ search_text }}" class="form-control" autocomplete="off" autocapitalize="characters" placeholder="For example ABC123"{% if is_mechanic %} autofocus{% endif %}>
+    </div>
+    <div class="col-auto"><button type="submit" class="btn btn-primary">Search</button></div>
+    {% if search_text %}<div class="col-auto"><a class="btn btn-link" href="{% url 'vehicles:list' %}">Clear</a></div>{% endif %}
+</form>
+{% endif %}
+
+{% if needs_search %}
+<p>Enter at least two characters of a number plate to look up a vehicle that is already in GarageLog and see its service history.</p>
+{% elif vehicles %}
 <div class="table-responsive">
     <table class="table table-striped align-middle">
         <caption class="visually-hidden">Vehicles with their WoF and registration expiry dates</caption>
@@ -16,7 +29,7 @@
             <tr>
                 <th scope="col">Plate</th>
                 <th scope="col">Vehicle</th>
-                {% if user.is_admin_role %}<th scope="col">Owner</th>{% endif %}
+                {% if can_search %}<th scope="col">Owner</th>{% endif %}
                 <th scope="col">WoF expiry</th>
                 <th scope="col">Registration expiry</th>
                 <th scope="col"><span class="visually-hidden">Actions</span></th>
@@ -27,7 +40,7 @@
             <tr>
                 <th scope="row">{{ vehicle.plate }}</th>
                 <td>{{ vehicle.year }} {{ vehicle.make }} {{ vehicle.model }}</td>
-                {% if user.is_admin_role %}<td>{{ vehicle.owner.username }}</td>{% endif %}
+                {% if can_search %}<td>{{ vehicle.owner.get_full_name|default:vehicle.owner.username }}</td>{% endif %}
                 <td>{% include 'includes/expiry.html' with date=vehicle.wof_expiry status=vehicle.wof_status %}</td>
                 <td>{% include 'includes/expiry.html' with date=vehicle.rego_expiry status=vehicle.rego_status %}</td>
                 <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{% url 'vehicles:detail' vehicle.pk %}">View<span class="visually-hidden"> {{ vehicle.plate }}</span></a></td>
@@ -39,12 +52,14 @@
 {% if is_paginated %}
 <nav aria-label="Vehicle list pages">
     <ul class="pagination">
-        {% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}">Previous</a></li>{% endif %}
+        {% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if search_text %}&amp;q={{ search_text|urlencode }}{% endif %}">Previous</a></li>{% endif %}
         <li class="page-item active" aria-current="page"><span class="page-link">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span></li>
-        {% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}">Next</a></li>{% endif %}
+        {% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if search_text %}&amp;q={{ search_text|urlencode }}{% endif %}">Next</a></li>{% endif %}
     </ul>
 </nav>
 {% endif %}
+{% elif search_text %}
+<p>No vehicle in GarageLog matches &ldquo;{{ search_text }}&rdquo;. Check the plate and try again.</p>
 {% else %}
 <p>{% if user.is_admin_role %}No vehicles have been added yet.{% else %}You haven't added a vehicle yet. Add one to book a service and track its WoF and registration dates.{% endif %}</p>
 {% endif %}

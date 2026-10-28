@@ -8,7 +8,7 @@
     {% if can_create %}<a class="btn btn-primary" href="{% url 'create_booking' %}">Book a service</a>{% endif %}
 </div>
 
-{% if is_admin %}
+{% if status_options %}
 <nav aria-label="Filter bookings by status" class="mb-3">
     <ul class="nav nav-pills">
         {% for value, label in status_options %}
@@ -31,7 +31,8 @@
                 <th scope="col">Service</th>
                 <th scope="col">Vehicle</th>
                 {% if is_admin or is_mechanic %}<th scope="col">Customer</th>{% endif %}
-                {% if is_admin %}<th scope="col">Mechanic</th>{% endif %}
+                {% if not is_mechanic %}<th scope="col">Workshop</th>{% endif %}
+                {% if is_admin or is_mechanic %}<th scope="col">Mechanic</th>{% endif %}
                 <th scope="col">Status</th>
                 <th scope="col"><span class="visually-hidden">Actions</span></th>
             </tr>
@@ -44,7 +45,8 @@
                 <td>{{ booking.service_type }}</td>
                 <td>{{ booking.vehicle.plate|default:"-" }}</td>
                 {% if is_admin or is_mechanic %}<td>{{ booking.customer.get_full_name|default:booking.customer.username }}</td>{% endif %}
-                {% if is_admin %}<td>{% if booking.mechanic %}{{ booking.mechanic.get_full_name|default:booking.mechanic.username }}{% else %}<span class="text-body-secondary">Not assigned</span>{% endif %}</td>{% endif %}
+                {% if not is_mechanic %}<td>{{ booking.workshop.name }}</td>{% endif %}
+                {% if is_admin or is_mechanic %}<td>{% if booking.mechanic %}{{ booking.mechanic.get_full_name|default:booking.mechanic.username }}{% else %}<span class="text-body-secondary">Not assigned</span>{% endif %}</td>{% endif %}
                 <td>{% include 'includes/booking_status.html' with status=booking.status label=booking.get_status_display %}</td>
                 <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{% url 'booking_detail' booking.pk %}">View<span class="visually-hidden"> booking #{{ booking.pk }}</span></a></td>
             </tr>
@@ -62,6 +64,6 @@
 </nav>
 {% endif %}
 {% else %}
-<p>{% if is_mechanic %}No bookings have been assigned to you yet.{% elif is_admin %}No bookings{% if status_filter %} with this status{% endif %}.{% else %}You have no bookings yet.{% endif %}</p>
+<p>{% if is_admin or is_mechanic %}No bookings{% if status_filter %} with this status{% endif %}.{% else %}You have no bookings yet.{% endif %}</p>
 {% endif %}
 {% endblock %}

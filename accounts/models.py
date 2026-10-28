@@ -1,5 +1,6 @@
 from django.contrib.auth.models import AbstractUser
 from django.contrib.auth.models import UserManager as DjangoUserManager
+from django.core.exceptions import ValidationError
 from django.db import models
 
 
@@ -26,8 +27,21 @@ class User(AbstractUser):
     )
     phone = models.CharField(max_length=30, blank=True)
     email_verified = models.BooleanField(default=False)
+    workshop = models.ForeignKey(
+        'workshops.Workshop',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='staff',
+        help_text='The workshop a mechanic works at. Mechanics can only manage bookings for this workshop.',
+    )
 
     objects = UserManager()
+
+    def clean(self):
+        super().clean()
+        if self.role == self.Role.MECHANIC and not self.workshop_id:
+            raise ValidationError({'workshop': 'Choose the workshop this mechanic works at.'})
 
     def save(self, *args, **kwargs):
         # Keep emails lower-case so uniqueness is effectively case-insensitive.

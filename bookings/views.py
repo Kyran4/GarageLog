@@ -9,26 +9,28 @@ from django.views.generic import CreateView, DeleteView, DetailView, ListView, U
 from accounts.mixins import AdminRequiredMixin, RoleRequiredMixin
 from accounts.models import User
 from vehicles.models import Vehicle
+from workshops.models import Workshop
 
 from . import scheduling
-from .forms import AdminBookingForm, BookingForm
+from .forms import BookingForm, StaffBookingForm
 from .models import Booking
 
 
 class BookingQuerysetMixin(LoginRequiredMixin):
     """Each role only ever sees its own slice of the bookings.
 
-    Customers see their own bookings, mechanics see the ones assigned to them, and admins see
-    everything. Anything outside that slice is a 404, so URLs cannot be guessed to read it.
+    Customers see their own bookings, mechanics see every booking at the workshop they are
+    assigned to, and admins see everything. Anything outside that slice is a 404, so URLs
+    cannot be guessed to read it.
     """
 
     def get_queryset(self):
         user = self.request.user
-        bookings = Booking.objects.select_related("customer", "mechanic", "vehicle")
+        bookings = Booking.objects.select_related("customer", "mechanic", "vehicle", "workshop")
         if user.is_admin_role:
             return bookings
         if user.is_mechanic:
-            return bookings.filter(mechanic=user)
+            return bookings.filter(workshop_id=user.workshop_id) if user.workshop_id else bookings.none()
         return bookings.filter(customer=user)
 
 
@@ -37,10 +39,14 @@ class BookingListView(BookingQuerysetMixin, ListView):
     context_object_name = "bookings"
     paginate_by = 20
 
+    def _is_staff(self):
+        user = self.request.user
+        return user.is_admin_role or user.is_mechanic
+
     def get_queryset(self):
         bookings = super().get_queryset().order_by("-booking_date", "-booking_time")
         status = self.request.GET.get("status", "")
-        if self.request.user.is_admin_role and status in dict(Booking.STATUS_CHOICES):
+        if self._is_staff() and status in dict(Booking.STATUS_CHOICES):
             bookings = bookings.filter(status=status)
         return bookings
 
@@ -49,13 +55,14 @@ class BookingListView(BookingQuerysetMixin, ListView):
         user = self.request.user
         context["is_admin"] = user.is_admin_role
         context["is_mechanic"] = user.is_mechanic
-        context["can_create"] = user.is_admin_role or user.is_customer
-        context["page_title"] = (
-            "All bookings" if user.is_admin_role
-            else "Assigned bookings" if user.is_mechanic
-            else "My bookings"
-        )
+        context["can_create"] = True
         if user.is_admin_role:
+            context["page_title"] = "All bookings"
+        elif user.is_mechanic:
+            context["page_title"] = f"Bookings at {user.workshop}" if user.workshop_id else "Bookings"
+        else:
+            context["page_title"] = "My bookings"
+        if self._is_staff():
             current = self.request.GET.get("status", "")
             context["status_filter"] = current if current in dict(Booking.STATUS_CHOICES) else ""
             context["status_options"] = [("", "All")] + Booking.STATUS_CHOICES
@@ -72,7 +79,6 @@ class BookingDetailView(BookingQuerysetMixin, DetailView):
         context["can_edit"] = self.object.can_be_edited_by(user)
         context["can_cancel"] = self.object.can_be_cancelled_by(user)
         context["is_admin"] = user.is_admin_role
-        context["can_see_vehicle_page"] = user.is_admin_role or user.is_customer
         return context
 
 
@@ -82,7 +88,7 @@ class BookingSaveMixin:
     template_name = "bookings/create_booking.html"
 
     def get_form_class(self):
-        return AdminBookingForm if self.request.user.is_admin_role else BookingForm
+        return BookingForm if self.request.user.is_customer else StaffBookingForm
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
@@ -98,11 +104,11 @@ class BookingSaveMixin:
         booking = form.instance
         try:
             with transaction.atomic():
-                scheduling.lock_capacity()
+                scheduling.lock_capacity(booking.workshop)
                 if (
                     booking.status in Booking.ACTIVE_STATUSES
-                    and scheduling.booked_count(booking.booking_date, booking.booking_time, booking.pk)
-                    >= scheduling.capacity()
+                    and scheduling.booked_count(booking.workshop, booking.booking_date, booking.booking_time, booking.pk)
+                    >= scheduling.capacity(booking.workshop)
                 ):
                     form.add_error("booking_time", "That time was just taken. Please choose another time.")
                     return False
@@ -114,13 +120,22 @@ class BookingSaveMixin:
 
 
 class BookingCreateView(BookingSaveMixin, RoleRequiredMixin, CreateView):
-    allowed_roles = (User.Role.CUSTOMER, User.Role.ADMIN)
+    allowed_roles = (User.Role.CUSTOMER, User.Role.MECHANIC, User.Role.ADMIN)
 
     def dispatch(self, request, *args, **kwargs):
         user = request.user
-        if user.is_authenticated and user.is_customer and not Vehicle.objects.filter(owner=user).exists():
-            messages.info(request, "Add your vehicle first, then you can book a service for it.")
-            return redirect("vehicles:create")
+        if user.is_authenticated:
+            if user.is_customer:
+                if not Workshop.objects.filter(is_active=True).exists():
+                    messages.info(request, "No workshops are taking bookings yet. Please check back soon.")
+                    return redirect("dashboard")
+                if not Vehicle.objects.filter(owner=user).exists():
+                    messages.info(request, "Add your vehicle first, then you can book a service for it.")
+                    return redirect("vehicles:create")
+            elif user.is_mechanic and not user.workshop_id:
+                messages.error(request, "You aren't assigned to a workshop yet, so you can't make bookings. "
+                                        "Ask an admin to assign you.")
+                return redirect("dashboard")
         return super().dispatch(request, *args, **kwargs)
 
     def get_initial(self):
@@ -128,7 +143,7 @@ class BookingCreateView(BookingSaveMixin, RoleRequiredMixin, CreateView):
         vehicle_id = self.request.GET.get("vehicle")
         if vehicle_id and vehicle_id.isdigit():
             initial["vehicle"] = vehicle_id
-            if self.request.user.is_admin_role:
+            if not self.request.user.is_customer:
                 # Booking from a vehicle's page: start with that vehicle's owner selected.
                 owner_id = Vehicle.objects.filter(pk=vehicle_id).values_list("owner_id", flat=True).first()
                 if owner_id:
@@ -136,11 +151,12 @@ class BookingCreateView(BookingSaveMixin, RoleRequiredMixin, CreateView):
         return initial
 
     def form_valid(self, form):
-        if not self.request.user.is_admin_role:
+        if self.request.user.is_customer:
             form.instance.customer = self.request.user
         if not self.save_booking(form):
             return self.form_invalid(form)
-        messages.success(self.request, "Your booking has been requested. We'll confirm it shortly.")
+        messages.success(self.request, "Your booking has been requested. We'll confirm it shortly."
+                         if self.request.user.is_customer else "The booking has been created.")
         return redirect(self.get_success_url())
 
     def get_context_data(self, **kwargs):
@@ -151,12 +167,6 @@ class BookingCreateView(BookingSaveMixin, RoleRequiredMixin, CreateView):
 
 class BookingUpdateView(BookingSaveMixin, BookingQuerysetMixin, UpdateView):
     context_object_name = "booking"
-
-    def dispatch(self, request, *args, **kwargs):
-        user = request.user
-        if user.is_authenticated and not (user.is_admin_role or user.is_customer):
-            raise PermissionDenied
-        return super().dispatch(request, *args, **kwargs)
 
     def get_object(self, queryset=None):
         booking = super().get_object(queryset)

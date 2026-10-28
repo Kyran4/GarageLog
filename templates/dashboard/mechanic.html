@@ -4,26 +4,40 @@
 
 {% block content %}
 <h1 class="h2">Welcome, {{ user.first_name|default:user.username }}</h1>
-<p class="text-body-secondary">Mechanic dashboard</p>
+<p class="text-body-secondary">Mechanic dashboard{% if workshop %} &ndash; {{ workshop.name }}{% endif %}</p>
+
+{% if not workshop %}
+<div class="alert alert-warning" role="status">You aren't assigned to a workshop yet. Ask an admin to assign you so you can see and make bookings.</div>
+{% endif %}
 
 <div class="row g-3 mb-4">
-    {% include 'dashboard/_link_card.html' with slug='assigned' title='Upcoming assigned bookings' count=upcoming_count text='Bookings assigned to you that have not happened yet.' url=bookings_url link_text='View bookings' %}
+    {% if workshop %}
+    {% include 'dashboard/_link_card.html' with slug='upcoming' title='Upcoming bookings at your workshop' count=upcoming_count text='Active bookings that have not happened yet.' url=bookings_url link_text='View bookings' %}
+    {% include 'dashboard/_link_card.html' with slug='assigned' title='Assigned to you' count=assigned_count text='Upcoming bookings where you are the mechanic.' url=bookings_url link_text='View bookings' %}
+    {% endif %}
+    {% if workshop %}
+    {% include 'dashboard/_link_card.html' with slug='lowstock' title='Low or out of stock' count=low_stock_count text='Parts at your workshop at or below their reorder level.' url=low_stock_url link_text='View low stock' %}
+    {% endif %}
+    {% include 'dashboard/_action_card.html' with slug='parts' title='Find parts' text='Search the parts library by plate, or by make and model, and see what your workshop has in stock.' url=parts_url link_text='Search parts' %}
+    {% include 'dashboard/_action_card.html' with slug='find' title='Find a vehicle' text='Look up any vehicle in GarageLog by number plate and read its service history.' url=vehicles_url link_text='Search vehicles' %}
     {% include 'dashboard/_placeholder_card.html' with slug='jobs' title='Job cards' text='Update job status, notes and parts used.' %}
 </div>
 
+{% if workshop %}
 <section aria-labelledby="next-heading">
-    <h2 class="h5" id="next-heading">Your next bookings</h2>
+    <h2 class="h5" id="next-heading">Next bookings at {{ workshop.name }}</h2>
     {% if next_bookings %}
     <ul class="list-group">
         {% for booking in next_bookings %}
         <li class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2">
-            <span><strong>{{ booking.booking_date|date:"D j M" }}</strong> at {{ booking.booking_time|time:"g:i a" }} &ndash; {{ booking.service_type }}{% if booking.vehicle %} ({{ booking.vehicle.plate }}){% endif %}</span>
+            <span><strong>{{ booking.booking_date|date:"D j M" }}</strong> at {{ booking.booking_time|time:"g:i a" }} &ndash; {{ booking.service_type }}{% if booking.vehicle %} ({{ booking.vehicle.plate }}){% endif %}{% if booking.mechanic_id == user.pk %} <span class="badge text-bg-info">Yours</span>{% endif %}</span>
             <a href="{% url 'booking_detail' booking.pk %}">View<span class="visually-hidden"> booking #{{ booking.pk }}</span></a>
         </li>
         {% endfor %}
     </ul>
     {% else %}
-    <p>No bookings have been assigned to you yet.</p>
+    <p>There are no upcoming bookings at your workshop.</p>
     {% endif %}
 </section>
+{% endif %}
 {% endblock %}
