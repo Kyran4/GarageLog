@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+
+{% block title %}Remove from stock | GarageLog{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <h1 class="h2 mb-3">Remove {{ item.part.part_number }} from stock?</h1>
+        <p>{{ item.part.name }} will no longer be listed in {{ item.workshop.name }} stock ({{ item.quantity }} currently recorded). The part stays in the shared parts library, so you can add it back later.</p>
+        <form method="post">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">Yes, remove it</button>
+            <a class="btn btn-link" href="{% url 'inventory:stock' %}{% if user.is_admin_role %}?workshop={{ item.workshop_id }}{% endif %}">No, keep it</a>
+        </form>
+    </div>
+</div>
+{% endblock %}

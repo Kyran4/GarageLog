@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if item %}Edit stock{% else %}Add to stock{% endif %} | GarageLog{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <h1 class="h2 mb-1">{% if item %}Edit stock{% else %}Add a part to stock{% endif %}</h1>
+        <p class="text-body-secondary">{{ workshop.name }}{% if item %} &ndash; {{ item.part.part_number }} {{ item.part.name }}{% endif %}</p>
+        <form method="post" novalidate>
+            {% csrf_token %}
+            {% include 'includes/form.html' with form=form %}
+            <button type="submit" class="btn btn-primary">{% if item %}Save changes{% else %}Add to stock{% endif %}</button>
+            <a class="btn btn-link" href="{% url 'inventory:stock' %}{{ workshop_query }}">Cancel</a>
+        </form>
+    </div>
+</div>
+{% endblock %}
