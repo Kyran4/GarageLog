@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ part.part_number }} | GarageLog{% endblock %}
+
+{% block content %}
+<nav aria-label="Breadcrumb"><a href="{% url 'inventory:search' %}">&larr; Back to parts</a></nav>
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 my-3">
+    <h1 class="h2 mb-0">{{ part.name }}</h1>
+    {% if workshop and not already_stocked %}
+    <a class="btn btn-primary" href="{% url 'inventory:stock_add' %}?part={{ part.pk }}{% if workshop_query %}&amp;workshop={{ workshop.pk }}{% endif %}">Add to {{ workshop.name }} stock</a>
+    {% endif %}
+</div>
+
+<dl class="row">
+    <dt class="col-sm-3">Part number</dt>
+    <dd class="col-sm-9">{{ part.part_number }}</dd>
+    <dt class="col-sm-3">Category</dt>
+    <dd class="col-sm-9">{{ part.get_category_display }}</dd>
+    {% if part.brand %}<dt class="col-sm-3">Brand</dt><dd class="col-sm-9">{{ part.brand }}</dd>{% endif %}
+    <dt class="col-sm-3">Guide price</dt>
+    <dd class="col-sm-9">${{ part.default_price }}</dd>
+    {% if part.description %}<dt class="col-sm-3">Notes</dt><dd class="col-sm-9">{{ part.description }}</dd>{% endif %}
+</dl>
+
+<section aria-labelledby="fits-heading" class="mb-4">
+    <h2 class="h4" id="fits-heading">Fits</h2>
+    {% if part.universal %}
+    <p>This is a universal part. It fits any vehicle.</p>
+    {% elif part.fitments.all %}
+    <ul>
+        {% for fitment in part.fitments.all %}<li>{{ fitment.description }}</li>{% endfor %}
+    </ul>
+    {% else %}
+    <p>No fitment has been recorded for this part.</p>
+    {% endif %}
+</section>
+
+<section aria-labelledby="stock-heading">
+    <h2 class="h4" id="stock-heading">Stock</h2>
+    {% if stock_rows %}
+    <div class="table-responsive">
+        <table class="table align-middle">
+            <caption class="visually-hidden">Stock of this part by workshop</caption>
+            <thead>
+                <tr><th scope="col">Workshop</th><th scope="col">Quantity</th><th scope="col">Price</th><th scope="col">Bin</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr>
+            </thead>
+            <tbody>
+                {% for item in stock_rows %}
+                <tr>
+                    <th scope="row">{{ item.workshop.name }}</th>
+                    <td>{{ item.quantity }}
+                        {% if item.is_out %}<span class="badge text-bg-danger">Out of stock</span>{% elif item.is_low %}<span class="badge text-bg-warning">Low</span>{% endif %}</td>
+                    <td>${{ item.price }}</td>
+                    <td>{{ item.bin_location|default:"-" }}</td>
+                    <td class="text-end"><a href="{% url 'inventory:stock_edit' item.pk %}">Edit<span class="visually-hidden"> stock at {{ item.workshop.name }}</span></a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p>{% if user.is_mechanic %}Your workshop doesn't stock this part.{% else %}No workshop stocks this part yet.{% endif %}</p>
+    {% endif %}
+</section>
+{% endblock %}

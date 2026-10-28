@@ -6,6 +6,7 @@ from django.utils import timezone
 
 from accounts.models import User
 from vehicles.models import Vehicle
+from workshops.models import Workshop
 
 from . import scheduling
 from .forms import BookingForm
@@ -20,6 +21,7 @@ def frozen_now(date, hour, minute=0):
 class BookingFormTests(TestCase):
 
     def setUp(self):
+        self.workshop = Workshop.objects.create(name="Central Workshop")
         self.customer = User.objects.create_user("casey", "casey@example.com", role=User.Role.CUSTOMER)
         self.vehicle = Vehicle.objects.create(
             owner=self.customer, plate="ABC123", make="Toyota", model="Corolla", year=2015,
@@ -28,6 +30,7 @@ class BookingFormTests(TestCase):
 
     def make_form(self, **overrides):
         data = {
+            "workshop": self.workshop.pk,
             "vehicle": self.vehicle.pk,
             "booking_date": self.open_day.isoformat(),
             "booking_time": "10:00",
@@ -99,3 +102,47 @@ class BookingFormTests(TestCase):
                 booking_date=self.open_day.isoformat(), booking_time="09:00").errors)
             self.assertTrue(self.make_form(
                 booking_date=self.open_day.isoformat(), booking_time="15:00").is_valid())
+
+    # ----------------------------------------------------------- workshops
+
+    def test_workshop_is_required(self):
+        form = self.make_form(workshop="")
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("workshop", form.errors)
+
+    def test_inactive_workshop_cannot_be_chosen(self):
+        closed = Workshop.objects.create(name="Closed Workshop", is_active=False)
+
+        form = self.make_form(workshop=closed.pk)
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("workshop", form.errors)
+
+    def test_each_workshop_uses_its_own_opening_hours(self):
+        late = Workshop.objects.create(
+            name="Late Workshop", open_time=datetime.time(10, 0), close_time=datetime.time(19, 0),
+        )
+
+        # 9:00 am is fine at the central workshop but before the late workshop opens.
+        self.assertTrue(self.make_form(booking_time="09:00").is_valid())
+        too_early = self.make_form(workshop=late.pk, booking_time="09:00")
+        self.assertFalse(too_early.is_valid())
+        self.assertIn("outside Late Workshop's hours", too_early.errors["booking_time"][0])
+        # 6:00 pm only exists at the late workshop.
+        self.assertTrue(self.make_form(workshop=late.pk, booking_time="18:00").is_valid())
+        self.assertFalse(self.make_form(booking_time="18:00").is_valid())
+
+    def test_weekend_opening_is_per_workshop(self):
+        saturday = self.open_day + datetime.timedelta(days=(5 - self.open_day.weekday()))
+        weekends = Workshop.objects.create(name="Weekend Workshop", open_saturday=True)
+
+        self.assertTrue(self.make_form(workshop=weekends.pk, booking_date=saturday.isoformat()).is_valid())
+        self.assertFalse(self.make_form(booking_date=saturday.isoformat()).is_valid())
+
+    def test_a_single_active_workshop_is_preselected(self):
+        form = BookingForm(user=self.customer)
+        self.assertEqual(form.initial["workshop"], self.workshop.pk)
+
+        Workshop.objects.create(name="Second Workshop")
+        self.assertNotIn("workshop", BookingForm(user=self.customer).initial)

@@ -1,11 +1,13 @@
 import datetime
 
 from django import forms
+from django.db.models import Q
 from django.utils import timezone
 
 from accounts.forms import BootstrapFormMixin
 from accounts.models import User
 from vehicles.models import Vehicle
+from workshops.models import Workshop
 
 from . import scheduling
 from .models import Booking
@@ -15,16 +17,26 @@ def _parse_time(value):
     return datetime.datetime.strptime(value, "%H:%M").time()
 
 
-class OwnerAwareSelect(forms.Select):
-    """A select whose vehicle options carry a data-owner attribute, so the page can show only
-    the vehicles that belong to the selected customer."""
+class TaggedSelect(forms.Select):
+    """A select whose options carry an extra data attribute (for example data-owner), so the
+    page can show only the options that belong to whatever is selected in another field."""
+
+    def __init__(self, *args, tag_name, tag_getter, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.tag_name = tag_name
+        self.tag_getter = tag_getter
 
     def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
         option = super().create_option(name, value, label, selected, index, subindex=subindex, attrs=attrs)
         instance = getattr(value, "instance", None)
         if instance is not None:
-            option["attrs"]["data-owner"] = instance.owner_id
+            option["attrs"][self.tag_name] = self.tag_getter(instance)
         return option
+
+
+class WorkshopChoiceField(forms.ModelChoiceField):
+    def label_from_instance(self, obj):
+        return f"{obj.name} ({obj.hours_text})"
 
 
 class VehicleChoiceField(forms.ModelChoiceField):
@@ -57,6 +69,14 @@ class BookingForm(BootstrapFormMixin, forms.ModelForm):
         ("Other", "Other (please specify)"),
     ]
 
+    # Customers can only book their own vehicles; the staff form turns this off.
+    own_vehicles_only = True
+
+    workshop = WorkshopChoiceField(
+        queryset=Workshop.objects.filter(is_active=True),
+        empty_label="Select a workshop",
+    )
+
     vehicle = VehicleChoiceField(
         queryset=Vehicle.objects.none(),
         empty_label="Select a vehicle",
@@ -64,12 +84,11 @@ class BookingForm(BootstrapFormMixin, forms.ModelForm):
 
     booking_time = forms.TypedChoiceField(
         label="Time",
-        choices=[("", "Select a time")] + scheduling.slot_choices(),
+        choices=[("", "Select a time")],
         coerce=_parse_time,
         empty_value=None,
-        help_text=f"Open {scheduling.OPEN_DAYS_TEXT}, {scheduling.format_time(scheduling.OPEN_TIME)} to "
-                  f"{scheduling.format_time(scheduling.CLOSE_TIME)}. Each booking is "
-                  f"{scheduling.SLOT_MINUTES} minutes.",
+        help_text=f"Each booking is {scheduling.SLOT_MINUTES} minutes. The workshop's opening hours are shown "
+                  f"next to its name.",
     )
 
     service_type = forms.ChoiceField(
@@ -89,6 +108,7 @@ class BookingForm(BootstrapFormMixin, forms.ModelForm):
         model = Booking
 
         fields = [
+            "workshop",
             "vehicle",
             "booking_date",
             "booking_time",
@@ -118,12 +138,17 @@ class BookingForm(BootstrapFormMixin, forms.ModelForm):
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.user = user
+        booking = self.instance
 
         self.fields["booking_date"].widget.attrs["min"] = timezone.localdate().isoformat()
-        if user is not None:
+        if user is not None and self.own_vehicles_only:
             self.fields["vehicle"].queryset = Vehicle.objects.filter(owner=user)
 
-        booking = self.instance
+        # A workshop that has since been deactivated stays valid for bookings already made there.
+        workshops = Workshop.objects.filter(Q(is_active=True) | Q(pk=booking.workshop_id))
+        self.fields["workshop"].queryset = workshops
+        self.fields["booking_time"].choices = [("", "Select a time")] + scheduling.all_slot_choices(workshops)
+
         if booking.pk:
             # Editing: show the saved time in the dropdown, and show a custom service as "Other".
             self.initial["booking_time"] = booking.booking_time.strftime("%H:%M")
@@ -131,9 +156,25 @@ class BookingForm(BootstrapFormMixin, forms.ModelForm):
             if booking.service_type not in known:
                 self.initial["service_type"] = "Other"
                 self.initial["other_service"] = booking.service_type
+            # Moving a booking to another workshop means making a new booking there.
+            self.fields["workshop"].disabled = True
+            self.fields["workshop"].help_text = "To use a different workshop, cancel this booking and make a new one."
+        elif workshops.count() == 1:
+            self.initial.setdefault("workshop", workshops.first().pk)
+
+    # ----------------------------------------------------------- helpers
+
+    def _workshop(self):
+        workshop = self.cleaned_data.get("workshop")
+        if workshop is None and self.instance.workshop_id:
+            workshop = self.instance.workshop
+        return workshop
 
     def _schedule_changed(self):
-        return self.instance.pk is None or bool({"booking_date", "booking_time"} & set(self.changed_data))
+        changed = {"booking_date", "booking_time", "workshop"} & set(self.changed_data)
+        return self.instance.pk is None or bool(changed)
+
+    # ----------------------------------------------------------- validation
 
     def clean_booking_date(self):
         date = self.cleaned_data["booking_date"]
@@ -163,12 +204,19 @@ class BookingForm(BootstrapFormMixin, forms.ModelForm):
             else:
                 cleaned_data["service_type"] = other
 
+        workshop = self._workshop()
         date = cleaned_data.get("booking_date")
         time = cleaned_data.get("booking_time")
-        if date and time and self._schedule_changed():
-            closed = scheduling.closed_reason(date)
+        if workshop and date and time and self._schedule_changed():
+            closed = scheduling.closed_reason(workshop, date)
             if closed:
                 self.add_error("booking_date", closed)
+            elif time not in workshop.slot_starts():
+                self.add_error(
+                    "booking_time",
+                    f"That time is outside {workshop.name}'s hours ({workshop.hours_text}). "
+                    f"Please choose another time.",
+                )
             elif scheduling.starts_at(date, time) < timezone.now():
                 self.add_error("booking_time", "That time has already passed. Please choose a later time.")
 
@@ -180,40 +228,60 @@ class BookingForm(BootstrapFormMixin, forms.ModelForm):
         pass
 
 
-class AdminBookingForm(BookingForm):
-    """Admins book on behalf of a customer and can assign a mechanic and set the status."""
+class StaffBookingForm(BookingForm):
+    """For admins and mechanics: book on behalf of a customer, assign a mechanic, set the status.
+
+    Admins choose any workshop. A mechanic's bookings are always at their own workshop, so the
+    workshop field is not shown to them.
+    """
+
+    own_vehicles_only = False
 
     customer = UserChoiceField(
         queryset=User.objects.filter(role=User.Role.CUSTOMER, is_active=True).order_by("username"),
         empty_label="Select a customer",
     )
+    vehicle = VehicleChoiceField(
+        queryset=Vehicle.objects.select_related("owner"),
+        empty_label="Select a vehicle",
+        show_owner=True,
+        widget=TaggedSelect(tag_name="data-owner", tag_getter=lambda vehicle: vehicle.owner_id),
+    )
     mechanic = UserChoiceField(
-        queryset=User.objects.filter(role=User.Role.MECHANIC, is_active=True).order_by("username"),
+        queryset=User.objects.filter(role=User.Role.MECHANIC, is_active=True).select_related("workshop").order_by("username"),
         required=False,
         empty_label="Not assigned yet",
+        widget=TaggedSelect(tag_name="data-workshop", tag_getter=lambda mechanic: mechanic.workshop_id),
     )
     status = forms.ChoiceField(choices=Booking.STATUS_CHOICES)
 
     field_order = [
-        "customer", "vehicle", "booking_date", "booking_time", "service_type",
+        "customer", "workshop", "vehicle", "booking_date", "booking_time", "service_type",
         "other_service", "notes", "mechanic", "status",
     ]
 
     class Meta(BookingForm.Meta):
         fields = [
-            "customer", "vehicle", "booking_date", "booking_time", "service_type",
+            "customer", "workshop", "vehicle", "booking_date", "booking_time", "service_type",
             "notes", "mechanic", "status",
         ]
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields["vehicle"] = VehicleChoiceField(
-            queryset=Vehicle.objects.select_related("owner"),
-            empty_label="Select a vehicle",
-            show_owner=True,
-            widget=OwnerAwareSelect,
-        )
-        self.fields["vehicle"].widget.attrs["class"] = "form-select"
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, user=user, **kwargs)
+        self.fields["workshop"].disabled = False
+        self.fields["workshop"].help_text = ""
+
+        if user is not None and user.is_mechanic:
+            workshop = user.workshop
+            del self.fields["workshop"]
+            self.instance.workshop = workshop
+            self.fields["mechanic"].queryset = User.objects.filter(
+                role=User.Role.MECHANIC, workshop=workshop, is_active=True,
+            ).order_by("username")
+            self.fields["booking_time"].choices = [("", "Select a time")] + scheduling.slot_choices(workshop)
+            self.fields["booking_time"].help_text = (
+                f"{workshop.name} is open {workshop.hours_text}. Each booking is {scheduling.SLOT_MINUTES} minutes."
+            )
 
     def clean(self):
         cleaned_data = super().clean()

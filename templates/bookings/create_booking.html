@@ -33,52 +33,63 @@
             toggleOther();
         }
 
-        // Admins: only offer the vehicles that belong to the selected customer.
-        // Without JavaScript every vehicle is listed and the server still rejects a mismatch.
-        var customerSelect = document.getElementById('id_customer');
-        var vehicleSelect = document.getElementById('id_vehicle');
-        if (customerSelect && vehicleSelect) {
-            var allOptions = Array.prototype.slice.call(vehicleSelect.options).map(function (option) {
-                return { value: option.value, text: option.text, owner: option.getAttribute('data-owner') };
+        // Staff: only offer the options that belong to whatever is chosen in the field above them
+        // (vehicles for the selected customer, mechanics for the selected workshop). Without
+        // JavaScript every option is listed and the server still rejects a mismatch.
+        function linkSelects(parentId, childId, attribute, labels) {
+            var parentSelect = document.getElementById(parentId);
+            var childSelect = document.getElementById(childId);
+            if (!parentSelect || !childSelect) { return; }
+
+            var allOptions = Array.prototype.slice.call(childSelect.options).map(function (option) {
+                return { value: option.value, text: option.text, tag: option.getAttribute(attribute) };
             });
             var status = document.createElement('div');
             status.className = 'form-text';
             status.setAttribute('aria-live', 'polite');
-            vehicleSelect.parentNode.insertBefore(status, vehicleSelect.nextSibling);
+            childSelect.parentNode.insertBefore(status, childSelect.nextSibling);
 
-            var filterVehicles = function () {
-                var customer = customerSelect.value;
-                var previous = vehicleSelect.value;
+            var filter = function () {
+                var parent = parentSelect.value;
+                var previous = childSelect.value;
                 var matches = allOptions.filter(function (option) {
-                    return option.value !== '' && option.owner === customer;
+                    return option.value !== '' && option.tag === parent;
                 });
 
-                vehicleSelect.innerHTML = '';
+                childSelect.innerHTML = '';
                 var placeholder = document.createElement('option');
                 placeholder.value = '';
-                placeholder.textContent = !customer ? 'Select a customer first'
-                    : matches.length ? 'Select a vehicle' : 'This customer has no vehicles';
-                vehicleSelect.appendChild(placeholder);
+                placeholder.textContent = !parent ? labels.choose
+                    : matches.length ? labels.pick : labels.none;
+                childSelect.appendChild(placeholder);
                 matches.forEach(function (option) {
                     var element = document.createElement('option');
                     element.value = option.value;
                     element.textContent = option.text;
-                    element.setAttribute('data-owner', option.owner);
-                    vehicleSelect.appendChild(element);
+                    element.setAttribute(attribute, option.tag);
+                    childSelect.appendChild(element);
                 });
 
-                // Keep the chosen vehicle only if it belongs to the newly selected customer.
-                vehicleSelect.value = previous;
-                if (vehicleSelect.value !== previous) { vehicleSelect.selectedIndex = 0; }
+                // Keep the chosen option only if it still belongs to the newly selected parent.
+                childSelect.value = previous;
+                if (childSelect.value !== previous) { childSelect.selectedIndex = 0; }
 
-                status.textContent = !customer ? ''
-                    : matches.length === 1 ? '1 vehicle available for this customer.'
-                    : matches.length + ' vehicles available for this customer.';
+                status.textContent = !parent ? ''
+                    : matches.length + (matches.length === 1 ? ' ' + labels.one : ' ' + labels.many);
             };
 
-            customerSelect.addEventListener('change', filterVehicles);
-            filterVehicles();
+            parentSelect.addEventListener('change', filter);
+            filter();
         }
+
+        linkSelects('id_customer', 'id_vehicle', 'data-owner', {
+            choose: 'Select a customer first', pick: 'Select a vehicle', none: 'This customer has no vehicles',
+            one: 'vehicle available for this customer.', many: 'vehicles available for this customer.'
+        });
+        linkSelects('id_workshop', 'id_mechanic', 'data-workshop', {
+            choose: 'Select a workshop first', pick: 'Not assigned yet', none: 'No mechanics at this workshop',
+            one: 'mechanic at this workshop.', many: 'mechanics at this workshop.'
+        });
     });
 </script>
 {% endblock %}

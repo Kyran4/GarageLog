@@ -8,17 +8,27 @@
     <h1 class="h2 mb-0">{{ vehicle.plate }}</h1>
     <div class="d-flex flex-wrap gap-2">
         <a class="btn btn-primary" href="{% url 'create_booking' %}?vehicle={{ vehicle.pk }}">Book a service</a>
+        {% if can_edit %}
         <a class="btn btn-outline-primary" href="{% url 'vehicles:edit' vehicle.pk %}">Edit</a>
         <a class="btn btn-outline-danger" href="{% url 'vehicles:delete' vehicle.pk %}">Delete</a>
+        {% endif %}
     </div>
 </div>
 
 <dl class="row">
     <dt class="col-sm-3">Vehicle</dt>
     <dd class="col-sm-9">{{ vehicle.year }} {{ vehicle.make }} {{ vehicle.model }}</dd>
-    {% if user.is_admin_role %}
+    {% if is_staff_view %}
     <dt class="col-sm-3">Owner</dt>
-    <dd class="col-sm-9">{{ vehicle.owner.get_full_name|default:vehicle.owner.username }} ({{ vehicle.owner.username }})</dd>
+    <dd class="col-sm-9">
+        {{ vehicle.owner.get_full_name|default:vehicle.owner.username }}{% if user.is_admin_role %} ({{ vehicle.owner.username }}){% endif %}
+        {% if can_see_contact %}
+            {% if vehicle.owner.phone %}<br>{{ vehicle.owner.phone }}{% endif %}
+            {% if vehicle.owner.email %}<br>{{ vehicle.owner.email }}{% endif %}
+        {% else %}
+            <br><span class="text-body-secondary">Contact details are shown once this customer has booked at your workshop.</span>
+        {% endif %}
+    </dd>
     {% endif %}
     <dt class="col-sm-3">WoF expiry</dt>
     <dd class="col-sm-9">{% include 'includes/expiry.html' with date=vehicle.wof_expiry status=vehicle.wof_status %}</dd>
@@ -35,10 +45,11 @@
             <span>
                 <strong>{{ booking.booking_date|date:"j M Y" }}</strong> at {{ booking.booking_time|time:"g:i a" }}
                 &ndash; {{ booking.service_type }}
+                <span class="text-body-secondary">at {{ booking.workshop.name }}</span>
             </span>
             <span>
                 {% include 'includes/booking_status.html' with status=booking.status label=booking.get_status_display %}
-                <a class="ms-2" href="{% url 'booking_detail' booking.pk %}">View<span class="visually-hidden"> booking #{{ booking.pk }}</span></a>
+                {% if booking.can_open %}<a class="ms-2" href="{% url 'booking_detail' booking.pk %}">View<span class="visually-hidden"> booking #{{ booking.pk }}</span></a>{% endif %}
             </span>
         </li>
         {% endfor %}

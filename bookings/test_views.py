@@ -5,6 +5,7 @@ from django.urls import reverse
 
 from accounts.models import User
 
+from . import scheduling
 from .models import Booking
 from .tests import frozen_now
 
@@ -32,13 +33,14 @@ def test_anonymous_users_are_sent_to_login(client, customer, vehicle, make_booki
     assert response.url == f"{reverse('accounts:login')}?next={url}"
 
 
-def test_mechanics_cannot_create_or_edit_bookings(client, mechanic, customer, vehicle, make_booking):
+def test_mechanics_cannot_delete_bookings(client, mechanic, customer, vehicle, make_booking):
     booking = make_booking(customer, vehicle, mechanic=mechanic)
     client.force_login(mechanic)
 
-    assert client.get(reverse('create_booking')).status_code == 403
-    assert client.get(reverse('booking_edit', kwargs={'pk': booking.pk})).status_code == 403
-    assert client.get(reverse('booking_delete', kwargs={'pk': booking.pk})).status_code == 403
+    response = client.post(reverse('booking_delete', kwargs={'pk': booking.pk}))
+
+    assert response.status_code == 403
+    assert Booking.objects.filter(pk=booking.pk).exists()
 
 
 def test_customers_cannot_delete_bookings(client, customer, vehicle, make_booking):
@@ -80,20 +82,21 @@ def test_customer_cannot_touch_someone_elses_booking(client, customer, make_user
     assert theirs.status == 'PENDING'
 
 
-def test_mechanic_only_sees_bookings_assigned_to_them(client, mechanic, make_user, customer, vehicle, make_booking):
-    other_mechanic = make_user('mechanic2', User.Role.MECHANIC)
+def test_mechanic_sees_every_booking_at_their_workshop_but_no_others(
+        client, mechanic, make_user, other_workshop, customer, vehicle, make_vehicle, make_booking):
     assigned = make_booking(customer, vehicle, mechanic=mechanic)
-    elsewhere = make_booking(customer, vehicle, mechanic=other_mechanic, time=datetime.time(11, 0))
-    unassigned = make_booking(customer, vehicle, time=datetime.time(12, 0))
+    unassigned = make_booking(customer, vehicle, time=datetime.time(11, 0))
+    other_vehicle = make_vehicle(customer, plate='NORTH01')
+    elsewhere = make_booking(customer, other_vehicle, workshop=other_workshop)
     client.force_login(mechanic)
 
     response = client.get(reverse('booking_list'))
 
-    assert list(response.context['bookings']) == [assigned]
-    assert response.context['page_title'] == 'Assigned bookings'
+    assert set(response.context['bookings']) == {assigned, unassigned}
+    assert response.context['page_title'] == 'Bookings at Central Workshop'
     assert client.get(reverse('booking_detail', kwargs={'pk': assigned.pk})).status_code == 200
+    assert client.get(reverse('booking_detail', kwargs={'pk': unassigned.pk})).status_code == 200
     assert client.get(reverse('booking_detail', kwargs={'pk': elsewhere.pk})).status_code == 404
-    assert client.get(reverse('booking_detail', kwargs={'pk': unassigned.pk})).status_code == 404
 
 
 def test_admin_sees_all_bookings_and_can_filter_by_status(client, admin_user, customer, vehicle, make_booking):
@@ -114,7 +117,7 @@ def test_admin_sees_all_bookings_and_can_filter_by_status(client, admin_user, cu
 # ---------------------------------------------------------------- customer creates a booking
 
 
-def test_customer_without_a_vehicle_is_sent_to_add_one(client, customer):
+def test_customer_without_a_vehicle_is_sent_to_add_one(client, customer, workshop):
     client.force_login(customer)
 
     response = client.get(reverse('create_booking'))
@@ -123,7 +126,7 @@ def test_customer_without_a_vehicle_is_sent_to_add_one(client, customer):
     assert response.url == reverse('vehicles:create')
 
 
-def test_create_booking_page_loads_and_preselects_vehicle(client, customer, vehicle):
+def test_create_booking_page_loads_and_preselects_vehicle(client, customer, vehicle, workshop):
     client.force_login(customer)
 
     response = client.get(reverse('create_booking') + f'?vehicle={vehicle.pk}')
@@ -380,14 +383,9 @@ def test_navbar_links_depend_on_role(client, customer, mechanic, admin_user):
         client.force_login(user)
         return client.get(reverse('dashboard'), follow=True).content.decode()
 
-    customer_page = navbar_for(customer)
-    assert reverse('vehicles:list') in customer_page and reverse('booking_list') in customer_page
-
-    mechanic_page = navbar_for(mechanic)
-    assert reverse('booking_list') in mechanic_page and reverse('vehicles:list') not in mechanic_page
-
-    admin_page = navbar_for(admin_user)
-    assert reverse('vehicles:list') in admin_page and reverse('booking_list') in admin_page
+    for user in (customer, mechanic, admin_user):
+        page = navbar_for(user)
+        assert reverse('vehicles:list') in page and reverse('booking_list') in page
 
 
 # ---------------------------------------------------------------- admin: vehicle follows the selected customer
@@ -406,7 +404,7 @@ def test_admin_vehicle_options_are_tagged_with_their_owner(
     assert f'<option value="{theirs.pk}" data-owner="{other.pk}">' in body
 
 
-def test_customer_form_has_no_owner_tags_or_customer_field(client, customer, vehicle):
+def test_customer_form_has_no_owner_tags_or_customer_field(client, customer, vehicle, workshop):
     client.force_login(customer)
 
     response = client.get(reverse('create_booking'))
@@ -446,3 +444,202 @@ def test_admin_edit_form_starts_with_the_bookings_customer_selected(client, admi
 
     assert form['customer'].value() == customer.pk
     assert form['vehicle'].value() == vehicle.pk
+
+
+# ---------------------------------------------------------------- workshops: customers
+
+
+def test_customer_with_no_workshops_available_is_told_so(client, customer, vehicle):
+    client.force_login(customer)
+
+    response = client.get(reverse('create_booking'))
+
+    assert response.status_code == 302
+    assert response.url == reverse('dashboard')
+
+
+def test_customer_picks_the_workshop_when_there_are_several(client, customer, vehicle, workshop, other_workshop, booking_data):
+    client.force_login(customer)
+
+    page = client.get(reverse('create_booking'))
+    assert {w.name for w in page.context['form'].fields['workshop'].queryset} == {workshop.name, other_workshop.name}
+    assert page.context['form']['workshop'].value() is None  # nothing preselected when there is a choice
+
+    response = client.post(reverse('create_booking'), booking_data(vehicle, workshop=other_workshop.pk))
+
+    assert response.status_code == 302
+    assert Booking.objects.get().workshop == other_workshop
+
+
+def test_customer_cannot_book_at_an_inactive_workshop(client, customer, vehicle, make_workshop, booking_data):
+    closed = make_workshop('Closed', is_active=False)
+    client.force_login(customer)
+
+    response = client.post(reverse('create_booking'), booking_data(vehicle, workshop=closed.pk))
+
+    assert response.status_code == 200
+    assert 'workshop' in response.context['form'].errors
+
+
+def test_customer_cannot_move_a_booking_to_another_workshop(
+        client, customer, vehicle, workshop, other_workshop, make_booking, booking_data):
+    booking = make_booking(customer, vehicle)
+    client.force_login(customer)
+
+    client.post(
+        reverse('booking_edit', kwargs={'pk': booking.pk}),
+        booking_data(vehicle, workshop=other_workshop.pk, notes='Trying to move it'),
+    )
+
+    booking.refresh_from_db()
+    assert booking.workshop == workshop
+    assert booking.notes == 'Trying to move it'
+
+
+def test_detail_page_shows_the_workshop(client, customer, vehicle, make_workshop, make_booking):
+    shop = make_workshop('Takapuna Motors', address='5 Lake Road', phone='09 555 1234')
+    booking = make_booking(customer, vehicle, workshop=shop)
+    client.force_login(customer)
+
+    body = client.get(reverse('booking_detail', kwargs={'pk': booking.pk})).content.decode()
+
+    assert 'Takapuna Motors' in body and '5 Lake Road' in body and '09 555 1234' in body
+
+
+# ---------------------------------------------------------------- workshops: mechanics
+
+
+def test_mechanic_creates_a_booking_for_a_customer_at_their_own_workshop(
+        client, mechanic, customer, vehicle, workshop, booking_data):
+    client.force_login(mechanic)
+
+    form = client.get(reverse('create_booking')).context['form']
+    assert 'workshop' not in form.fields  # a mechanic's bookings are always at their own workshop
+
+    response = client.post(reverse('create_booking'), booking_data(
+        vehicle, customer=customer.pk, mechanic=mechanic.pk, status='CONFIRMED',
+    ))
+
+    assert response.status_code == 302
+    booking = Booking.objects.get()
+    assert (booking.customer, booking.workshop, booking.mechanic, booking.status) == (
+        customer, workshop, mechanic, 'CONFIRMED')
+
+
+def test_mechanic_cannot_place_a_booking_at_another_workshop(
+        client, mechanic, customer, vehicle, workshop, other_workshop, booking_data):
+    client.force_login(mechanic)
+
+    client.post(reverse('create_booking'), booking_data(
+        vehicle, customer=customer.pk, workshop=other_workshop.pk, status='PENDING',
+    ))
+
+    assert Booking.objects.get().workshop == workshop  # the submitted workshop is ignored
+
+
+def test_mechanic_can_only_assign_mechanics_from_their_workshop(
+        client, mechanic, make_user, other_workshop, customer, vehicle):
+    colleague = make_user('colleague', User.Role.MECHANIC)
+    northern = make_user('northern', User.Role.MECHANIC, workshop=other_workshop)
+    client.force_login(mechanic)
+
+    form = client.get(reverse('create_booking')).context['form']
+
+    assert set(form.fields['mechanic'].queryset) == {mechanic, colleague}
+    assert northern not in form.fields['mechanic'].queryset
+
+
+def test_mechanic_time_choices_follow_their_workshops_hours(client, mechanic, workshop, customer, vehicle):
+    client.force_login(mechanic)
+
+    form = client.get(reverse('create_booking')).context['form']
+
+    assert [label for _, label in form.fields['booking_time'].choices][1:] == [
+        label for _, label in scheduling.slot_choices(workshop)]
+
+
+def test_mechanic_can_edit_and_cancel_bookings_at_their_workshop(client, mechanic, customer, vehicle, make_booking, booking_data):
+    booking = make_booking(customer, vehicle)  # unassigned, but at the mechanic's workshop
+    client.force_login(mechanic)
+
+    edit = client.post(
+        reverse('booking_edit', kwargs={'pk': booking.pk}),
+        booking_data(vehicle, customer=customer.pk, mechanic=mechanic.pk, status='CONFIRMED', notes='Taking this one'),
+    )
+    assert edit.status_code == 302
+    booking.refresh_from_db()
+    assert (booking.mechanic, booking.status, booking.notes) == (mechanic, 'CONFIRMED', 'Taking this one')
+
+    cancel = client.post(reverse('booking_cancel', kwargs={'pk': booking.pk}))
+    assert cancel.status_code == 302
+    booking.refresh_from_db()
+    assert booking.status == 'CANCELLED'
+
+
+def test_mechanic_cannot_touch_another_workshops_booking(
+        client, mechanic, customer, vehicle, other_workshop, make_booking):
+    elsewhere = make_booking(customer, vehicle, workshop=other_workshop)
+    client.force_login(mechanic)
+
+    for url_name in ('booking_detail', 'booking_edit', 'booking_cancel'):
+        assert client.get(reverse(url_name, kwargs={'pk': elsewhere.pk})).status_code == 404
+    assert client.post(reverse('booking_cancel', kwargs={'pk': elsewhere.pk})).status_code == 404
+    elsewhere.refresh_from_db()
+    assert elsewhere.status == 'PENDING'
+
+
+def test_mechanic_status_filter_applies_within_their_workshop(client, mechanic, customer, vehicle, make_booking):
+    pending = make_booking(customer, vehicle)
+    confirmed = make_booking(customer, vehicle, time=datetime.time(11, 0), status='CONFIRMED')
+    client.force_login(mechanic)
+
+    response = client.get(reverse('booking_list') + '?status=CONFIRMED')
+
+    assert list(response.context['bookings']) == [confirmed]
+    assert pending not in response.context['bookings']
+
+
+def test_mechanic_without_a_workshop_cannot_make_bookings_and_sees_none(client, make_user, customer, vehicle, make_booking):
+    drifter = make_user('drifter', User.Role.MECHANIC)
+    drifter.workshop = None
+    drifter.save()
+    make_booking(customer, vehicle)
+    client.force_login(drifter)
+
+    assert list(client.get(reverse('booking_list')).context['bookings']) == []
+    response = client.get(reverse('create_booking'))
+    assert response.status_code == 302
+    assert response.url == reverse('dashboard')
+
+
+# ---------------------------------------------------------------- admin: workshop and mechanic follow each other
+
+
+def test_admin_chooses_the_workshop_and_mechanics_are_tagged_with_theirs(
+        client, admin_user, mechanic, make_user, other_workshop, workshop, customer, vehicle):
+    northern = make_user('northern', User.Role.MECHANIC, workshop=other_workshop)
+    client.force_login(admin_user)
+
+    response = client.get(reverse('create_booking'))
+    body = response.content.decode()
+
+    assert 'workshop' in response.context['form'].fields
+    assert f'<option value="{mechanic.pk}" data-workshop="{workshop.pk}">' in body
+    assert f'<option value="{northern.pk}" data-workshop="{other_workshop.pk}">' in body
+
+
+def test_admin_can_book_at_any_workshop(client, admin_user, customer, vehicle, other_workshop, booking_data):
+    client.force_login(admin_user)
+
+    response = client.post(reverse('create_booking'), booking_data(
+        vehicle, customer=customer.pk, workshop=other_workshop.pk, status='PENDING',
+    ))
+
+    assert response.status_code == 302
+    assert Booking.objects.get().workshop == other_workshop
+
+
+def test_admin_dashboard_link_to_workshops_uses_the_admin_site(client, admin_user, workshop):
+    client.force_login(admin_user)
+    body = client.get(reverse('admin_dashboard')).content.decode()
+    assert reverse('admin:workshops_workshop_changelist') in body

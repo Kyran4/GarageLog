@@ -27,6 +27,12 @@ class Booking(models.Model):
         related_name="bookings",
     )
 
+    workshop = models.ForeignKey(
+        "workshops.Workshop",
+        on_delete=models.PROTECT,
+        related_name="bookings",
+    )
+
     # Optional only so bookings made before vehicles existed still load; the forms require it.
     vehicle = models.ForeignKey(
         "vehicles.Vehicle",
@@ -83,19 +89,30 @@ class Booking(models.Model):
 
     def clean(self):
         super().clean()
-        if self.status not in self.ACTIVE_STATUSES or not (self.booking_date and self.booking_time):
+        if (
+            self.status not in self.ACTIVE_STATUSES
+            or not (self.booking_date and self.booking_time)
+            or not self.workshop_id
+        ):
             return
 
         errors = {}
-        if scheduling.booked_count(self.booking_date, self.booking_time, self.pk) >= scheduling.capacity():
+        if scheduling.booked_count(self.workshop, self.booking_date, self.booking_time, self.pk) \
+                >= scheduling.capacity(self.workshop):
             errors["booking_time"] = "That time is fully booked. Please choose another time."
 
         if self.vehicle_id and self._clashes(vehicle_id=self.vehicle_id):
             errors["vehicle"] = "This vehicle already has a booking at that time."
 
-        if self.mechanic_id and self._clashes(mechanic_id=self.mechanic_id):
+        if self.mechanic_id:
             # Not tied to a field because the customer form has no mechanic field.
-            errors[NON_FIELD_ERRORS] = ["That mechanic is already booked at that time."]
+            problems = []
+            if self.mechanic.workshop_id != self.workshop_id:
+                problems.append("That mechanic works at a different workshop.")
+            elif self._clashes(mechanic_id=self.mechanic_id):
+                problems.append("That mechanic is already booked at that time.")
+            if problems:
+                errors[NON_FIELD_ERRORS] = problems
 
         if errors:
             raise ValidationError(errors)
@@ -131,15 +148,19 @@ class Booking(models.Model):
     def is_upcoming(self):
         return self.is_active and self.starts_at >= timezone.now()
 
+    def _is_staff_here(self, user):
+        """Admins work across workshops; a mechanic only at the workshop they are assigned to."""
+        return user.is_admin_role or (user.is_mechanic and user.workshop_id == self.workshop_id)
+
     def can_be_edited_by(self, user):
-        """Admins can always edit. Customers can edit their own booking until it has started."""
-        if user.is_admin_role:
+        """Staff can edit bookings at their workshop. Customers can edit their own until it starts."""
+        if self._is_staff_here(user):
             return True
         return user.pk == self.customer_id and self.is_upcoming
 
     def can_be_cancelled_by(self, user):
         if not self.is_active:
             return False
-        if user.is_admin_role:
+        if self._is_staff_here(user):
             return True
         return user.pk == self.customer_id and self.is_upcoming

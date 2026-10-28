@@ -19,10 +19,44 @@
 <div class="row g-3 mb-4">
     {% include 'dashboard/_link_card.html' with slug='bookings' title='Bookings awaiting confirmation' count=pending_count text='Pending bookings that need confirming and a mechanic.' url=pending_url link_text='Review pending bookings' %}
     {% include 'dashboard/_link_card.html' with slug='allbookings' title='Upcoming bookings' count=upcoming_count text='Active bookings that have not happened yet.' url=bookings_url link_text='View all bookings' %}
+    {% include 'dashboard/_link_card.html' with slug='workshops' title='Workshops' count=workshop_count text='Workshops that take bookings. Add workshops and assign mechanics in the Django admin.' url=workshops_admin_url link_text='Manage workshops' %}
     {% include 'dashboard/_link_card.html' with slug='vehicles' title='Vehicles' count=vehicle_count text='Vehicles registered with the workshop.' url=vehicles_url link_text='View vehicles' %}
-    {% include 'dashboard/_placeholder_card.html' with slug='inventory' title='Parts inventory' text='Track stock and low-stock alerts.' %}
+    {% include 'dashboard/_link_card.html' with slug='parts' title='Parts library' count=part_count text='Parts in the shared catalogue. Each workshop keeps its own stock of them.' url=parts_url link_text='Search parts and stock' %}
     {% include 'dashboard/_placeholder_card.html' with slug='analytics' title='Analytics' text='Bookings, revenue and upcoming expiries.' %}
 </div>
+
+<section aria-labelledby="workshops-heading" class="mb-4">
+    <h2 class="h5" id="workshops-heading">Workshops</h2>
+    {% if workshop_rows %}
+    <div class="table-responsive">
+        <table class="table align-middle">
+            <caption class="visually-hidden">Workshops with their mechanics and upcoming bookings</caption>
+            <thead>
+                <tr>
+                    <th scope="col">Workshop</th>
+                    <th scope="col">Hours</th>
+                    <th scope="col">Mechanics</th>
+                    <th scope="col">Upcoming bookings</th>
+                    <th scope="col">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in workshop_rows %}
+                <tr>
+                    <th scope="row">{{ row.workshop.name }}</th>
+                    <td>{{ row.workshop.hours_text }}</td>
+                    <td>{{ row.mechanics }}</td>
+                    <td>{{ row.upcoming }}</td>
+                    <td>{% if row.workshop.is_active %}Active{% else %}Inactive{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p>No workshops yet. Add one in the Django admin so customers can book.</p>
+    {% endif %}
+</section>
 
 <section aria-labelledby="users-heading">
     <h2 class="h5" id="users-heading">Users</h2>
@@ -35,6 +69,7 @@
                     <th scope="col">Name</th>
                     <th scope="col">Email</th>
                     <th scope="col">Role</th>
+                    <th scope="col">Workshop</th>
                     <th scope="col">Status</th>
                     <th scope="col">Joined</th>
                 </tr>
@@ -46,11 +81,12 @@
                     <td>{{ person.get_full_name|default:"-" }}</td>
                     <td>{{ person.email }}</td>
                     <td>{{ person.get_role_display }}</td>
+                    <td>{{ person.workshop.name|default:"-" }}</td>
                     <td>{% if person.is_active %}Active{% elif person.email_verified %}Disabled{% else %}Awaiting email verification{% endif %}</td>
                     <td>{{ person.date_joined|date:"j M Y" }}</td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="6">No users yet.</td></tr>
+                <tr><td colspan="7">No users yet.</td></tr>
                 {% endfor %}
             </tbody>
         </table>

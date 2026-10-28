@@ -2,12 +2,15 @@ import re
 
 import pytest
 from django.core import mail
+from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.urls import reverse
 
 from accounts.backends import EmailOrUsernameBackend
 from accounts.models import User
+from vehicles.models import Vehicle
+from workshops.models import Workshop
 
 pytestmark = pytest.mark.django_db
 
@@ -451,7 +454,25 @@ def test_seed_demo_users_creates_users_and_is_repeatable(db, settings, client):
     call_command('seed_demo_users')
 
     assert User.objects.count() == 5
+    assert Workshop.objects.count() == 2
+    assert Vehicle.objects.count() == 2
+    assert User.objects.get(username='mechanic1').workshop != User.objects.get(username='mechanic2').workshop
     assert User.objects.filter(role=User.Role.ADMIN).count() == 1
     assert User.objects.filter(role=User.Role.MECHANIC).count() == 2
     assert User.objects.filter(role=User.Role.CUSTOMER).count() == 2
     assert client.login(username='mechanic1', password='GarageLog-demo-1')
+
+
+def test_a_mechanic_must_have_a_workshop(db):
+    mechanic = User(username='m', email='m@example.com', role=User.Role.MECHANIC)
+    with pytest.raises(ValidationError) as error:
+        mechanic.full_clean(exclude=['password'])
+    assert 'workshop' in error.value.message_dict
+
+    mechanic.workshop = Workshop.objects.create(name='Somewhere')
+    mechanic.full_clean(exclude=['password'])
+
+
+def test_customers_and_admins_do_not_need_a_workshop(db):
+    for role in (User.Role.CUSTOMER, User.Role.ADMIN):
+        User(username=f'u-{role}', email=f'{role}@example.com', role=role).full_clean(exclude=['password'])

@@ -17,18 +17,20 @@ def book(client, booking_data, vehicle, **overrides):
     return client.post(reverse('create_booking'), booking_data(vehicle, **overrides))
 
 
-# ---------------------------------------------------------------- capacity
+# ---------------------------------------------------------------- capacity (counted per workshop)
 
 
-def test_capacity_is_one_when_there_are_no_mechanics(db):
-    assert scheduling.capacity() == 1
+def test_capacity_is_one_when_a_workshop_has_no_mechanics(workshop):
+    assert scheduling.capacity(workshop) == 1
 
 
-def test_capacity_is_one_per_active_mechanic(make_user):
+def test_capacity_is_one_per_active_mechanic_at_that_workshop(make_user, workshop, other_workshop):
     make_user('m1', User.Role.MECHANIC)
     make_user('m2', User.Role.MECHANIC)
     make_user('retired', User.Role.MECHANIC, is_active=False)
-    assert scheduling.capacity() == 2
+    make_user('elsewhere', User.Role.MECHANIC, workshop=other_workshop)
+    assert scheduling.capacity(workshop) == 2
+    assert scheduling.capacity(other_workshop) == 1
 
 
 def test_a_full_slot_is_refused_and_another_slot_is_fine(
@@ -44,6 +46,18 @@ def test_a_full_slot_is_refused_and_another_slot_is_fine(
     assert 'fully booked' in refused.context['form'].errors['booking_time'][0]
     assert accepted.status_code == 302
     assert Booking.objects.filter(customer=customer).count() == 1
+
+
+def test_a_full_workshop_does_not_block_another_workshop(
+        client, mechanic, customer, vehicle, other_workshop, make_user, make_vehicle, make_booking, booking_data):
+    other = make_user('sam')
+    make_booking(other, make_vehicle(other, plate='SAM111'))  # Central Workshop is full at 10:00
+    client.force_login(customer)
+
+    response = book(client, booking_data, vehicle, workshop=other_workshop.pk)
+
+    assert response.status_code == 302
+    assert Booking.objects.get(customer=customer).workshop == other_workshop
 
 
 def test_two_mechanics_allow_two_bookings_in_a_slot_but_not_three(
@@ -113,6 +127,17 @@ def test_same_vehicle_cannot_be_booked_twice_in_a_slot(client, make_user, custom
     assert 'already has a booking' in response.context['form'].errors['vehicle'][0]
 
 
+def test_same_vehicle_cannot_be_at_two_workshops_at_once(
+        client, customer, vehicle, other_workshop, make_booking, booking_data):
+    make_booking(customer, vehicle)  # Central Workshop, 10:00
+    client.force_login(customer)
+
+    response = book(client, booking_data, vehicle, workshop=other_workshop.pk)  # North Workshop, 10:00
+
+    assert response.status_code == 200
+    assert 'already has a booking' in response.context['form'].errors['vehicle'][0]
+
+
 def test_a_mechanic_cannot_be_assigned_to_two_bookings_in_a_slot(
         client, admin_user, make_user, mechanic, customer, vehicle, make_vehicle, make_booking, booking_data):
     make_user('m2', User.Role.MECHANIC)
@@ -130,6 +155,23 @@ def test_a_mechanic_cannot_be_assigned_to_two_bookings_in_a_slot(
     assert 'mechanic is already booked' in response.content.decode()
     second.refresh_from_db()
     assert second.mechanic is None
+
+
+def test_a_mechanic_cannot_be_assigned_to_another_workshops_booking(
+        client, admin_user, make_user, other_workshop, customer, vehicle, make_booking, booking_data):
+    northern = make_user('northern', User.Role.MECHANIC, workshop=other_workshop)
+    booking = make_booking(customer, vehicle)  # at Central Workshop
+    client.force_login(admin_user)
+
+    response = client.post(
+        reverse('booking_edit', kwargs={'pk': booking.pk}),
+        booking_data(vehicle, customer=customer.pk, mechanic=northern.pk, status='CONFIRMED'),
+    )
+
+    assert response.status_code == 200
+    assert 'works at a different workshop' in response.content.decode()
+    booking.refresh_from_db()
+    assert booking.mechanic is None
 
 
 def test_database_refuses_a_double_booked_vehicle_even_without_the_form_checks(customer, vehicle, make_booking):
@@ -179,11 +221,28 @@ def test_earlier_time_today_is_refused(client, customer, vehicle, booking_data, 
     assert accepted.status_code == 302
 
 
-def test_slot_choices_cover_opening_hours():
-    labels = [label for _, label in scheduling.slot_choices()]
+def test_slot_choices_cover_opening_hours(workshop):
+    labels = [label for _, label in scheduling.slot_choices(workshop)]
     assert labels[0] == '8:00 am'
     assert labels[-1] == '4:00 pm'
     assert len(labels) == 9
+
+
+def test_all_slot_choices_combine_every_workshops_hours(make_workshop):
+    early = make_workshop('Early', open_time=datetime.time(6, 0), close_time=datetime.time(10, 0))
+    late = make_workshop('Late', open_time=datetime.time(15, 0), close_time=datetime.time(19, 0))
+
+    labels = [label for _, label in scheduling.all_slot_choices([early, late])]
+
+    assert labels == ['6:00 am', '7:00 am', '8:00 am', '9:00 am', '3:00 pm', '4:00 pm', '5:00 pm', '6:00 pm']
+
+
+def test_next_open_date_respects_a_workshops_weekend_hours(make_workshop):
+    weekdays_only = make_workshop('Weekdays')
+    open_saturdays = make_workshop('Saturdays', open_saturday=True)
+
+    assert scheduling.next_open_date(weekdays_only, days_ahead=0).weekday() < 5
+    assert scheduling.next_open_date(open_saturdays, days_ahead=0).weekday() < 6
 
 
 def test_booking_helpers(customer, vehicle, make_booking, open_day):

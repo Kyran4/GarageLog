@@ -1,0 +1,104 @@
+{% extends 'base.html' %}
+
+{% block title %}Workshop stock | GarageLog{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <h1 class="h2 mb-0">{% if workshop %}{{ workshop.name }} stock{% else %}Workshop stock{% endif %}</h1>
+    <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-outline-primary" href="{% url 'inventory:search' %}">Find parts</a>
+        {% if workshop %}<a class="btn btn-primary" href="{% url 'inventory:stock_add' %}{{ workshop_query }}">Add a part to stock</a>{% endif %}
+    </div>
+</div>
+
+{% if not workshop %}
+<div class="alert alert-warning" role="status">You aren't assigned to a workshop yet, so there is no stock to show. Ask an admin to assign you.</div>
+{% else %}
+
+{% if workshops %}
+<form method="get" class="row g-2 align-items-end mb-3" aria-label="Choose a workshop">
+    <div class="col-sm-6 col-md-4">
+        <label for="workshop-choice" class="form-label">Workshop</label>
+        <select name="workshop" id="workshop-choice" class="form-select">
+            {% for choice in workshops %}<option value="{{ choice.pk }}"{% if choice.pk == workshop.pk %} selected{% endif %}>{{ choice.name }}</option>{% endfor %}
+        </select>
+    </div>
+    <div class="col-auto"><button type="submit" class="btn btn-outline-primary">Show</button></div>
+</form>
+{% endif %}
+
+<p class="text-body-secondary">{{ total_count }} part{{ total_count|pluralize }} in stock records.
+    {% if low_count %}<strong>{{ low_count }} {{ low_count|pluralize:"is,are" }} low or out of stock.</strong>{% endif %}</p>
+
+<form method="get" class="row g-2 align-items-end mb-3" role="search" aria-label="Filter this workshop's stock">
+    {% if workshops %}<input type="hidden" name="workshop" value="{{ workshop.pk }}">{% endif %}
+    <div class="col-sm-6 col-md-4">
+        <label for="stock-q" class="form-label">Part name or number</label>
+        <input type="search" id="stock-q" name="q" value="{{ search_text }}" class="form-control" autocomplete="off">
+    </div>
+    <div class="col-sm-6 col-md-3">
+        <label for="stock-category" class="form-label">Category</label>
+        <select name="category" id="stock-category" class="form-select">
+            <option value="">All categories</option>
+            {% for value, label in categories %}<option value="{{ value }}"{% if value == category %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+    </div>
+    <div class="col-auto">
+        <div class="form-check mb-2">
+            <input type="checkbox" class="form-check-input" id="stock-low" name="low" value="1"{% if low_only %} checked{% endif %}>
+            <label for="stock-low" class="form-check-label">Low or out of stock only</label>
+        </div>
+    </div>
+    <div class="col-auto"><button type="submit" class="btn btn-primary">Filter</button></div>
+</form>
+
+{% if items %}
+<div class="table-responsive">
+    <table class="table table-striped align-middle">
+        <caption class="visually-hidden">Parts held at {{ workshop.name }}</caption>
+        <thead>
+            <tr>
+                <th scope="col">Part number</th>
+                <th scope="col">Name</th>
+                <th scope="col">Category</th>
+                <th scope="col">Quantity</th>
+                <th scope="col">Reorder at</th>
+                <th scope="col">Price</th>
+                <th scope="col">Bin</th>
+                <th scope="col"><span class="visually-hidden">Actions</span></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr>
+                <th scope="row"><a href="{% url 'inventory:detail' item.part.pk %}{{ workshop_query }}">{{ item.part.part_number }}</a></th>
+                <td>{{ item.part.name }}</td>
+                <td>{{ item.part.get_category_display }}</td>
+                <td>{{ item.quantity }}
+                    {% if item.is_out %}<span class="badge text-bg-danger">Out of stock</span>{% elif item.is_low %}<span class="badge text-bg-warning">Low</span>{% endif %}</td>
+                <td>{{ item.reorder_level }}</td>
+                <td>${{ item.price }}{% if item.unit_price is not None %} <span class="badge text-bg-info">Workshop price</span>{% endif %}</td>
+                <td>{{ item.bin_location|default:"-" }}</td>
+                <td class="text-end text-nowrap">
+                    <a class="btn btn-sm btn-outline-primary" href="{% url 'inventory:stock_edit' item.pk %}">Edit<span class="visually-hidden"> {{ item.part.part_number }}</span></a>
+                    <a class="btn btn-sm btn-outline-danger" href="{% url 'inventory:stock_delete' item.pk %}">Remove<span class="visually-hidden"> {{ item.part.part_number }}</span></a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% if is_paginated %}
+<nav aria-label="Stock list pages">
+    <ul class="pagination">
+        {% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?{% if querystring %}{{ querystring }}&amp;{% endif %}page={{ page_obj.previous_page_number }}">Previous</a></li>{% endif %}
+        <li class="page-item active" aria-current="page"><span class="page-link">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span></li>
+        {% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?{% if querystring %}{{ querystring }}&amp;{% endif %}page={{ page_obj.next_page_number }}">Next</a></li>{% endif %}
+    </ul>
+</nav>
+{% endif %}
+{% else %}
+<p>{% if total_count %}No stock matches those filters.{% else %}This workshop has no stock yet. Use "Add a part to stock" to start.{% endif %}</p>
+{% endif %}
+{% endif %}
+{% endblock %}
