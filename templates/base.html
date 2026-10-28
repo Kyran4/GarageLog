@@ -1,3 +1,4 @@
+{% load static %}
 <!doctype html>
 <html lang="en">
 <head>
@@ -12,13 +13,16 @@
             left: 1rem;
             z-index: 1100;
         }
-        .skip-link:focus {
-            top: 1rem;
-        }
+
+            .skip-link:focus {
+                top: 1rem;
+            }
+
         :focus-visible {
             outline: 3px solid #ffbf47;
             outline-offset: 2px;
         }
+
         main:focus {
             outline: none;
         }
@@ -29,34 +33,39 @@
     {% with url_name=request.resolver_match.url_name ns=request.resolver_match.namespace %}
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark" aria-label="Main navigation">
         <div class="container">
-            <a class="navbar-brand" href="{% url 'home' %}">GarageLog</a>
+            <a class="navbar-brand d-flex align-items-center"
+               href="{% url 'home' %}">
+                <img src="{% static 'logo_light.svg' %}"
+                     alt="GarageLog"
+                     style="height: 40px; width: auto;">
+            </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#main-navigation" aria-controls="main-navigation" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="main-navigation">
                 <ul class="navbar-nav ms-auto align-items-lg-center">
                     <li class="nav-item">
-                        <a class="nav-link{% if url_name == 'home' %} active{% endif %}" {% if url_name == 'home' %}aria-current="page"{% endif %} href="{% url 'home' %}">Home</a>
+                        <a class="nav-link{% if url_name == 'home' %} active{% endif %}" {% if url_name == 'home' %}aria-current="page" {% endif %} href="{% url 'home' %}">Home</a>
                     </li>
                     {% if user.is_authenticated %}
                     <li class="nav-item">
-                        <a class="nav-link{% if 'dashboard' in url_name %} active{% endif %}" {% if 'dashboard' in url_name %}aria-current="page"{% endif %} href="{% url 'dashboard' %}">Dashboard</a>
+                        <a class="nav-link{% if 'dashboard' in url_name %} active{% endif %}" {% if 'dashboard' in url_name %}aria-current="page" {% endif %} href="{% url 'dashboard' %}">Dashboard</a>
                     </li>
                     {% if user.is_customer or user.is_admin_role or user.is_mechanic %}
                     <li class="nav-item">
-                        <a class="nav-link{% if ns == 'vehicles' %} active{% endif %}" {% if ns == 'vehicles' %}aria-current="page"{% endif %} href="{% url 'vehicles:list' %}">Vehicles</a>
+                        <a class="nav-link{% if ns == 'vehicles' %} active{% endif %}" {% if ns == 'vehicles' %}aria-current="page" {% endif %} href="{% url 'vehicles:list' %}">Vehicles</a>
                     </li>
                     {% endif %}
                     {% if user.is_mechanic or user.is_admin_role %}
                     <li class="nav-item">
-                        <a class="nav-link{% if ns == 'inventory' %} active{% endif %}" {% if ns == 'inventory' %}aria-current="page"{% endif %} href="{% url 'inventory:search' %}">Parts</a>
+                        <a class="nav-link{% if ns == 'inventory' %} active{% endif %}" {% if ns == 'inventory' %}aria-current="page" {% endif %} href="{% url 'inventory:search' %}">Parts</a>
                     </li>
                     {% endif %}
                     <li class="nav-item">
-                        <a class="nav-link{% if 'booking' in url_name %} active{% endif %}" {% if 'booking' in url_name %}aria-current="page"{% endif %} href="{% url 'booking_list' %}">Bookings</a>
+                        <a class="nav-link{% if 'booking' in url_name %} active{% endif %}" {% if 'booking' in url_name %}aria-current="page" {% endif %} href="{% url 'booking_list' %}">Bookings</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link{% if url_name == 'profile' %} active{% endif %}" {% if url_name == 'profile' %}aria-current="page"{% endif %} href="{% url 'accounts:profile' %}">Profile</a>
+                        <a class="nav-link{% if url_name == 'profile' %} active{% endif %}" {% if url_name == 'profile' %}aria-current="page" {% endif %} href="{% url 'accounts:profile' %}">Profile</a>
                     </li>
                     <li class="nav-item">
                         <form method="post" action="{% url 'accounts:logout' %}" class="d-inline">
@@ -66,10 +75,10 @@
                     </li>
                     {% else %}
                     <li class="nav-item">
-                        <a class="nav-link{% if url_name == 'login' %} active{% endif %}" {% if url_name == 'login' %}aria-current="page"{% endif %} href="{% url 'accounts:login' %}">Log in</a>
+                        <a class="nav-link{% if url_name == 'login' %} active{% endif %}" {% if url_name == 'login' %}aria-current="page" {% endif %} href="{% url 'accounts:login' %}">Log in</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link{% if url_name == 'signup' %} active{% endif %}" {% if url_name == 'signup' %}aria-current="page"{% endif %} href="{% url 'accounts:signup' %}">Sign up</a>
+                        <a class="nav-link{% if url_name == 'signup' %} active{% endif %}" {% if url_name == 'signup' %}aria-current="page" {% endif %} href="{% url 'accounts:signup' %}">Sign up</a>
                     </li>
                     {% endif %}
                 </ul>
