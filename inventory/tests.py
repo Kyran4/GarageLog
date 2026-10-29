@@ -15,6 +15,7 @@ from vehicles.models import Vehicle
 from .importer import parse_fitment, parse_years
 from .management.commands.import_parts import DEFAULT_CSV
 from .models import Part, PartFitment, StockItem, parts_matching
+from .seeding import EMPTY, SAMPLE, seed_workshop_stock
 
 pytestmark = pytest.mark.django_db
 
@@ -275,8 +276,17 @@ def test_demo_csv_rows_are_all_well_formed():
 # ---------------------------------------------------------------- demo stock
 
 
-def test_seed_demo_stock_needs_parts_and_workshops(workshop):
-    with pytest.raises(CommandError, match='no parts'):
+def test_seed_demo_stock_loads_the_demo_library_first_when_it_is_empty(workshop):
+    assert not Part.objects.exists()
+
+    call_command('seed_demo_stock', stdout=io.StringIO())
+
+    assert Part.objects.count() == 200
+    assert StockItem.objects.filter(workshop=workshop).exists()
+
+
+def test_seed_demo_stock_needs_a_workshop(db):
+    with pytest.raises(CommandError, match='no workshops'):
         call_command('seed_demo_stock')
 
 
@@ -304,3 +314,98 @@ def test_seed_demo_stock_does_not_overwrite_stock_that_was_changed(workshop):
 
     item.refresh_from_db()
     assert item.quantity == 99
+
+
+def test_seed_demo_stock_can_target_one_workshop(workshop, other_workshop):
+    call_command('seed_demo_stock', '--workshop', 'North Workshop', stdout=io.StringIO())
+
+    assert StockItem.objects.filter(workshop=other_workshop).exists()
+    assert not StockItem.objects.filter(workshop=workshop).exists()
+
+
+def test_seed_demo_stock_can_target_several_workshops_by_name(workshop, other_workshop, make_workshop):
+    third = make_workshop('Third Workshop')
+
+    call_command('seed_demo_stock', '--workshop', 'North Workshop', '--workshop', 'Third Workshop', stdout=io.StringIO())
+
+    assert not StockItem.objects.filter(workshop=workshop).exists()
+    assert StockItem.objects.filter(workshop=other_workshop).exists() and StockItem.objects.filter(workshop=third).exists()
+
+
+def test_seed_demo_stock_rejects_an_unknown_workshop_name(workshop):
+    with pytest.raises(CommandError, match='No workshop is named: Nowhere'):
+        call_command('seed_demo_stock', '--workshop', 'Nowhere')
+    assert not Part.objects.exists()  # it failed before loading anything
+
+
+def test_seed_demo_stock_can_start_everything_at_zero(workshop):
+    call_command('seed_demo_stock', '--empty', stdout=io.StringIO())
+
+    assert StockItem.objects.filter(workshop=workshop).count() == 200
+    assert not StockItem.objects.exclude(quantity=0).exists()
+
+
+def test_a_workshop_added_later_can_be_seeded_without_touching_the_others(workshop, make_workshop):
+    call_command('seed_demo_stock', stdout=io.StringIO())
+    before = list(StockItem.objects.filter(workshop=workshop).values_list('pk', 'quantity'))
+    newcomer = make_workshop('Brand New Workshop')
+
+    call_command('seed_demo_stock', '--workshop', 'Brand New Workshop', stdout=io.StringIO())
+
+    assert StockItem.objects.filter(workshop=newcomer).exists()
+    assert list(StockItem.objects.filter(workshop=workshop).values_list('pk', 'quantity')) == before
+
+
+# ---------------------------------------------------------------- seed_workshop_stock
+
+
+def test_sample_seeding_adds_roughly_three_quarters_with_varied_quantities(workshop):
+    call_command('import_parts', stdout=io.StringIO())
+
+    added = seed_workshop_stock(workshop, SAMPLE)
+
+    assert added == StockItem.objects.filter(workshop=workshop).count()
+    assert 130 < added < 170
+    quantities = set(StockItem.objects.values_list('quantity', flat=True))
+    assert 0 in quantities and len(quantities) > 5
+
+
+def test_empty_seeding_lists_every_active_part_at_zero(workshop, make_part):
+    make_part('A', universal=True)
+    make_part('B', universal=True)
+    make_part('GONE', universal=True, is_active=False)
+
+    added = seed_workshop_stock(workshop, EMPTY)
+
+    assert added == 2
+    assert sorted(StockItem.objects.values_list('part__part_number', flat=True)) == ['A', 'B']
+    assert not StockItem.objects.exclude(quantity=0).exists()
+
+
+def test_seeding_never_changes_stock_the_workshop_already_has(workshop, make_part, make_stock):
+    kept = make_stock(workshop, make_part('KEEP', universal=True), quantity=42, bin_location='Z9')
+    make_part('NEW', universal=True)
+
+    added = seed_workshop_stock(workshop, EMPTY)
+
+    kept.refresh_from_db()
+    assert (kept.quantity, kept.bin_location) == (42, 'Z9')
+    assert added == 1
+
+
+def test_seeding_twice_adds_nothing_the_second_time(workshop):
+    call_command('import_parts', stdout=io.StringIO())
+    seed_workshop_stock(workshop, EMPTY)
+    assert seed_workshop_stock(workshop, EMPTY) == 0
+    assert seed_workshop_stock(workshop, SAMPLE) == 0
+
+
+def test_sample_seeding_is_the_same_every_time(workshop, other_workshop):
+    call_command('import_parts', stdout=io.StringIO())
+    seed_workshop_stock(workshop)
+    first = sorted(StockItem.objects.filter(workshop=workshop).values_list('part__part_number', 'quantity'))
+    StockItem.objects.all().delete()
+
+    seed_workshop_stock(workshop)
+
+    assert sorted(StockItem.objects.filter(workshop=workshop).values_list('part__part_number', 'quantity')) == first

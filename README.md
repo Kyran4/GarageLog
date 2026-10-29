@@ -13,7 +13,6 @@ python -m pip install -r requirements.txt
 Copy-Item .env.example .env
 python manage.py migrate
 python manage.py seed_demo_users
-python manage.py import_parts
 python manage.py seed_demo_stock
 ```
 
@@ -26,7 +25,6 @@ python -m pip install -r requirements.txt
 cp .env.example .env
 python manage.py migrate
 python manage.py seed_demo_users
-python manage.py import_parts
 python manage.py seed_demo_stock
 ```
 
@@ -122,9 +120,24 @@ A mechanic can only change their own workshop's stock. Add or edit catalogue par
 
 ### The demo catalogue
 
-`python manage.py import_parts` loads `inventory/data/demo_parts.csv`: 200 generic parts (40 universal ones such as oil, wiper blades and bulbs, plus oil filters, air filters, front brake pads and spark plugs or fuel filters for 40 popular NZ vehicle ranges). **It is demo data: the part numbers and prices are made up and the fitment is illustrative, not checked against real vehicles.** Running it again updates parts instead of duplicating them. `python manage.py seed_demo_stock` then gives each workshop stock of about three quarters of the parts.
+`inventory/data/demo_parts.csv` holds 200 generic parts (40 universal ones such as oil, wiper blades and bulbs, plus oil filters, air filters, front brake pads and spark plugs or fuel filters for 40 popular NZ vehicle ranges). **It is demo data: the part numbers and prices are made up and the fitment is illustrative, not checked against real vehicles.**
 
-To add more parts, add rows to the CSV (or make your own file) and run `python manage.py import_parts path/to/file.csv`. Columns: `part_number, name, brand, category, default_price, universal, fitment, description`.
+### Seeding a workshop's stock
+
+Stocking a workshop is done once, from the terminal:
+
+```
+python manage.py seed_demo_stock
+```
+
+This loads the demo catalogue if the parts library is empty, then gives every workshop a starting stock from it (about three quarters of the parts, with sample quantities). It only adds parts a workshop doesn't have yet and never changes existing stock, so it is safe to run again.
+
+- `--workshop "Workshop name"` stocks just that workshop. Repeat it for more than one. Use it after adding a new workshop.
+- `--empty` lists every part at a quantity of 0 instead of sample quantities, ready for real counts to be entered.
+
+After that, each workshop adds, edits and removes its own stock on the Parts pages.
+
+To add more parts to the library, add rows to the CSV (or make your own file) and run `python manage.py import_parts path/to/file.csv` (with no path it imports the demo catalogue). Then seed workshops as above to pick up the new parts. Columns: `part_number, name, brand, category, default_price, universal, fitment, description`.
 
 - `category` is one of `FLUIDS, FILTERS, BRAKES, IGNITION, ELECTRICAL, WIPERS, WORKSHOP`.
 - `universal` is `yes` for parts that fit any vehicle (no fitment), otherwise `no`.

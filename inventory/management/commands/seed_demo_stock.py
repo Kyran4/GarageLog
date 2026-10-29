@@ -1,47 +1,48 @@
-import random
-from decimal import Decimal
-
+from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
 
-from inventory.models import Part, StockItem
+from inventory.models import Part
+from inventory.seeding import EMPTY, SAMPLE, seed_workshop_stock
 from workshops.models import Workshop
 
 
 class Command(BaseCommand):
     help = (
-        'Give every workshop some demo stock from the parts catalogue (about three quarters of the parts, with '
-        'varied quantities). Stock that already exists is left alone. Run import_parts first.'
+        'Give workshops a starting set of stock from the parts library. If the library is empty it loads the '
+        '200-part demo catalogue first, so this one command is all you need. Stock a workshop already has is left '
+        'alone, so it is safe to run again, for example after adding a new workshop.'
     )
 
+    def add_arguments(self, parser):
+        parser.add_argument(
+            '--workshop', action='append', metavar='NAME',
+            help='Only seed this workshop (by name). Repeat for more than one. Default: every workshop.',
+        )
+        parser.add_argument(
+            '--empty', action='store_true',
+            help='List every part at a quantity of 0 instead of sample quantities.',
+        )
+
     def handle(self, *args, **options):
-        parts = list(Part.objects.filter(is_active=True))
-        workshops = list(Workshop.objects.all())
-        if not parts:
-            raise CommandError('There are no parts yet. Run "python manage.py import_parts" first.')
+        workshops = Workshop.objects.order_by('name')
+        if options['workshop']:
+            workshops = workshops.filter(name__in=options['workshop'])
+            missing = set(options['workshop']) - set(workshops.values_list('name', flat=True))
+            if missing:
+                raise CommandError(f'No workshop is named: {", ".join(sorted(missing))}')
+        workshops = list(workshops)
         if not workshops:
             raise CommandError('There are no workshops yet. Run "python manage.py seed_demo_users" first.')
 
-        created = 0
-        for workshop in workshops:
-            for part in parts:
-                # Seeded per workshop and part, so the demo data is the same every time.
-                rng = random.Random(f'{workshop.pk}:{part.pk}')
-                if rng.random() > 0.75:
-                    continue  # this workshop does not stock this part
-                price = None
-                if rng.random() < 0.2:
-                    price = (part.default_price * Decimal('1.10')).quantize(Decimal('0.10'))
-                _, was_created = StockItem.objects.get_or_create(
-                    workshop=workshop, part=part,
-                    defaults={
-                        'quantity': rng.choice([0, 2, 4, 5, 6, 8, 10, 12, 15, 20, 24, 30]),
-                        'reorder_level': rng.choice([2, 2, 3, 4]),
-                        'unit_price': price,
-                        'bin_location': f'{rng.choice("ABCD")}{rng.randint(1, 6)}-{rng.randint(1, 9)}',
-                    },
-                )
-                created += was_created
+        if not Part.objects.exists():
+            self.stdout.write('The parts library is empty, so the demo catalogue is being loaded first.')
+            call_command('import_parts', stdout=self.stdout)
 
+        mode = EMPTY if options['empty'] else SAMPLE
+        for workshop in workshops:
+            added = seed_workshop_stock(workshop, mode)
+            self.stdout.write(f'{workshop.name}: added {added} part(s) to stock.')
         self.stdout.write(self.style.SUCCESS(
-            f'Added {created} stock items across {len(workshops)} workshop(s). This is demo data.'
+            'Done. This is '
+            + ('every library part at quantity 0.' if mode == EMPTY else 'demo data with sample quantities.')
         ))
