@@ -44,11 +44,30 @@
                 <td>{{ booking.booking_time|time:"g:i a" }}</td>
                 <td>{{ booking.service_type }}</td>
                 <td>{{ booking.vehicle.plate|default:"-" }}</td>
-                {% if is_admin or is_mechanic %}<td>{{ booking.customer.get_full_name|default:booking.customer.username }}</td>{% endif %}
-                {% if not is_mechanic %}<td>{{ booking.workshop.name }}</td>{% endif %}
-                {% if is_admin or is_mechanic %}<td>{% if booking.mechanic %}{{ booking.mechanic.get_full_name|default:booking.mechanic.username }}{% else %}<span class="text-body-secondary">Not assigned</span>{% endif %}</td>{% endif %}
+                {% if is_admin or is_mechanic %}
+                <td>{{ booking.customer.get_full_name|default:booking.customer.username }}</td>{% endif %}
+                {% if not is_mechanic %}
+                <td>{{ booking.workshop.name }}</td>{% endif %}
+                {% if is_admin or is_mechanic %}
+                <td>{% if booking.mechanic %}{{ booking.mechanic.get_full_name|default:booking.mechanic.username }}{% else %}<span class="text-body-secondary">Not assigned</span>{% endif %}</td>{% endif %}
                 <td>{% include 'includes/booking_status.html' with status=booking.status label=booking.get_status_display %}</td>
-                <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{% url 'booking_detail' booking.pk %}">View<span class="visually-hidden"> booking #{{ booking.pk }}</span></a></td>
+                <td class="text-end">
+                    <div class="d-flex flex-wrap justify-content-end gap-2">
+                        {% if is_admin or is_mechanic %}
+                        {% if booking.job_card %}
+                        {% if is_admin or booking.job_card.mechanic == user %}
+                        <a class="btn btn-sm btn-primary" href="{% url 'jobcard_detail' booking.job_card.pk %}">Job card<span class="visually-hidden"> for booking #{{ booking.pk }}</span></a>
+                        {% endif %}
+                        {% elif booking.status == 'CONFIRMED' and not booking.workshop.is_parts_warehouse %}
+                        <form method="post" action="{% url 'jobcard_create' booking.pk %}" class="d-inline">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm btn-primary">Create job card<span class="visually-hidden"> for booking #{{ booking.pk }}</span></button>
+                        </form>
+                        {% endif %}
+                        {% endif %}
+                        <a class="btn btn-sm btn-outline-primary" href="{% url 'booking_detail' booking.pk %}">View<span class="visually-hidden"> booking #{{ booking.pk }}</span></a>
+                    </div>
+                </td>
             </tr>
             {% endfor %}
         </tbody>

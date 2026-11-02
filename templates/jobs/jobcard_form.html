@@ -54,7 +54,7 @@
         </div>
         {% endfor %}
         <button type="submit" class="btn btn-primary">Save changes</button>
-        <a href="{% url 'jobcard_list' %}" class="btn btn-outline-secondary">Back to job cards</a>
+        <a href="{% url 'booking_detail' job_card.booking.pk %}" class="btn btn-outline-secondary">Back to booking</a>
     </form>
 </section>
 {% endblock %}

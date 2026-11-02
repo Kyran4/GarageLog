@@ -1,9 +1,12 @@
 from django.contrib import messages
-from django.urls import reverse_lazy
+from django.shortcuts import get_object_or_404, redirect
+from django.urls import reverse
+from django.views import View
 from django.views.generic import ListView, UpdateView
 
 from accounts.mixins import RoleRequiredMixin
 from accounts.models import User
+from bookings.models import Booking
 
 from .models import JobCard
 
@@ -48,7 +51,8 @@ class JobCardDetailView(JobCardQuerysetMixin, RoleRequiredMixin, UpdateView):
     fields = ["description", "work_done", "status"]
     template_name = "jobs/jobcard_form.html"
     context_object_name = "job_card"
-    success_url = reverse_lazy("jobcard_list")
+    def get_success_url(self):
+        return reverse("booking_detail", kwargs={"pk": self.object.booking_id})
 
     def get_form(self, form_class=None):
         form = super().get_form(form_class)
@@ -67,3 +71,49 @@ class JobCardDetailView(JobCardQuerysetMixin, RoleRequiredMixin, UpdateView):
         context = super().get_context_data(**kwargs)
         context["page_title"] = f"Job card #{self.object.pk}"
         return context
+
+
+class JobCardCreateView(RoleRequiredMixin, View):
+    """Creates the job card for a booking. Only reachable by POST (the button on the booking page)."""
+
+    allowed_roles = (User.Role.MECHANIC, User.Role.ADMIN)
+
+    def post(self, request, booking_id):
+        user = request.user
+
+        # Same rule as the booking pages: a mechanic only reaches bookings at their own workshop.
+        bookings = Booking.objects.select_related("workshop", "mechanic")
+        if user.is_mechanic:
+            bookings = bookings.filter(workshop_id=user.workshop_id)
+        booking = get_object_or_404(bookings, pk=booking_id)
+
+        back_to_booking = redirect("booking_detail", pk=booking.pk)
+
+        if booking.status != "CONFIRMED":
+            messages.error(request, "Only confirmed bookings can have a job card.")
+            return back_to_booking
+
+        if booking.workshop.is_parts_warehouse:
+            messages.error(request, "The parts warehouse does not take bookings, so it has no job cards.")
+            return back_to_booking
+
+        # Use the booking's mechanic. A mechanic with no one assigned takes the job themselves.
+        mechanic = booking.mechanic
+        if mechanic is None and user.is_mechanic:
+            mechanic = user
+        if mechanic is None:
+            messages.error(request, "Assign a mechanic to this booking first, then create the job card.")
+            return back_to_booking
+
+        job_card, created = JobCard.objects.get_or_create(
+            booking=booking,
+            defaults={"mechanic": mechanic},
+        )
+        if not created:
+            messages.info(request, "This booking already has a job card.")
+            return back_to_booking
+
+        messages.success(request, "The job card has been created.")
+        if user.is_admin_role or job_card.mechanic_id == user.pk:
+            return redirect("jobcard_detail", pk=job_card.pk)
+        return back_to_booking
