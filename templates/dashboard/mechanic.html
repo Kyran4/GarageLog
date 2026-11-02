@@ -3,8 +3,11 @@
 {% block title %}Mechanic dashboard | GarageLog{% endblock %}
 
 {% block content %}
-<h1 class="h2">Welcome, {{ user.first_name|default:user.username }}</h1>
-<p class="text-body-secondary">Mechanic dashboard{% if workshop %} &ndash; {{ workshop.name }}{% if is_warehouse %} (parts warehouse){% endif %}{% endif %}</p>
+{% include 'includes/theme.html' %}
+<div class="gl-banner">
+    <h1 class="h2">Welcome, {{ user.first_name|default:user.username }}</h1>
+    <p class="text-body-secondary mb-0">Mechanic dashboard{% if workshop %} &ndash; {{ workshop.name }}{% if is_warehouse %} (parts warehouse){% endif %}{% endif %}</p>
+</div>
 
 {% if not workshop %}
 <div class="alert alert-warning" role="status">You aren't assigned to a workshop yet. Ask an admin to assign you so you can see and make bookings.</div>
