@@ -3,18 +3,295 @@
 {% block title %}Home | GarageLog{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-lg-8 text-center py-4">
-        <h1 class="display-5 fw-bold">GarageLog</h1>
-        <p class="lead">Vehicle service history, bookings and WOF and registration reminders for independent workshops.</p>
-        <div class="d-flex flex-wrap justify-content-center gap-2">
-            {% if user.is_authenticated %}
-            <a class="btn btn-primary btn-lg" href="{% url 'dashboard' %}">Go to your dashboard</a>
-            {% else %}
-            <a class="btn btn-primary btn-lg" href="{% url 'accounts:login' %}">Log in</a>
-            <a class="btn btn-outline-primary btn-lg" href="{% url 'accounts:signup' %}">Create an account</a>
-            {% endif %}
+<style>
+    .gl-hero {
+        background: linear-gradient(135deg, #111827 0%, #1f2937 55%, #0b4a7d 100%);
+        color: #fff;
+        border-radius: 1rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+        .gl-hero::after {
+            content: "";
+            position: absolute;
+            right: -6rem;
+            top: -6rem;
+            width: 22rem;
+            height: 22rem;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(0, 163, 255, 0.35), rgba(0, 163, 255, 0) 70%);
+            pointer-events: none;
+        }
+
+        .gl-hero > * {
+            position: relative;
+            z-index: 1;
+        }
+
+    .gl-hero .lead {
+        color: #d1d5db;
+    }
+
+    .gl-badge {
+        display: inline-block;
+        padding: 0.3rem 0.8rem;
+        border-radius: 999px;
+        background: rgba(0, 163, 255, 0.18);
+        color: #7cc8ff;
+        font-size: 0.85rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+    }
+
+    .gl-stat {
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 0.75rem;
+        padding: 0.9rem 1rem;
+        height: 100%;
+    }
+
+        .gl-stat strong {
+            display: block;
+            font-size: 1.1rem;
+        }
+
+        .gl-stat span {
+            color: #d1d5db;
+            font-size: 0.9rem;
+        }
+
+    .gl-icon {
+        width: 3rem;
+        height: 3rem;
+        border-radius: 0.75rem;
+        background: linear-gradient(135deg, #0078d4, #00a3ff);
+        color: #fff;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 0.75rem;
+    }
+
+        .gl-icon svg {
+            width: 1.6rem;
+            height: 1.6rem;
+        }
+
+    .gl-card {
+        border: 1px solid var(--bs-border-color);
+        border-radius: 0.9rem;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+        .gl-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 0.6rem 1.2rem rgba(0, 0, 0, 0.08);
+        }
+
+    .gl-step-number {
+        width: 2.5rem;
+        height: 2.5rem;
+        border-radius: 50%;
+        background: #0078d4;
+        color: #fff;
+        font-weight: 700;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 0.5rem;
+    }
+
+    .gl-cta {
+        background: linear-gradient(135deg, #0078d4, #00a3ff);
+        color: #fff;
+        border-radius: 1rem;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .gl-card {
+            transition: none;
+        }
+
+            .gl-card:hover {
+                transform: none;
+            }
+    }
+</style>
+
+{# ---------- Hero ---------- #}
+<section class="gl-hero text-center px-3 px-md-5 py-5 mb-5" aria-labelledby="home-title">
+    <span class="gl-badge mb-3">Built for independent workshops</span>
+    <h1 class="display-4 fw-bold" id="home-title">GarageLog</h1>
+    <p class="lead mx-auto mb-4" style="max-width: 40rem;">Vehicle service history, bookings and WOF and registration reminders for independent workshops.</p>
+    <div class="d-flex flex-wrap justify-content-center gap-2 mb-5">
+        {% if user.is_authenticated %}
+        <a class="btn btn-primary btn-lg" href="{% url 'dashboard' %}">Go to your dashboard</a>
+        {% else %}
+        <a class="btn btn-primary btn-lg" href="{% url 'accounts:login' %}">Log in</a>
+        <a class="btn btn-outline-light btn-lg" href="{% url 'accounts:signup' %}">Create an account</a>
+        {% endif %}
+    </div>
+    <div class="row g-3 text-start mx-auto" style="max-width: 46rem;">
+        <div class="col-12 col-md-4">
+            <div class="gl-stat"><strong>One record</strong><span>for every vehicle</span></div>
+        </div>
+        <div class="col-12 col-md-4">
+            <div class="gl-stat"><strong>1-hour slots</strong><span>no double bookings</span></div>
+        </div>
+        <div class="col-12 col-md-4">
+            <div class="gl-stat"><strong>Expiry warnings</strong><span>for WOF and rego</span></div>
         </div>
     </div>
-</div>
+</section>
+
+{# ---------- Features ---------- #}
+<section class="mb-5" aria-labelledby="features-title">
+    <div class="text-center mb-4">
+        <h2 class="h1 fw-bold" id="features-title">Everything your workshop needs</h2>
+        <p class="text-body-secondary mb-0">Keep the paperwork in one place so you can get on with the cars.</p>
+    </div>
+    <div class="row g-4">
+        <div class="col-md-6 col-lg-4">
+            <div class="card gl-card h-100">
+                <div class="card-body">
+                    <span class="gl-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l2-6a2 2 0 0 1 2-1.4h10a2 2 0 0 1 2 1.4l2 6"/><path d="M3 13h18v5a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1H6v1a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><circle cx="7.5" cy="15" r=".6"/><circle cx="16.5" cy="15" r=".6"/></svg>
+                    </span>
+                    <h3 class="h5 card-title">Vehicle records</h3>
+                    <p class="card-text text-body-secondary mb-0">Add a vehicle with its number plate, make, model and year, and see its full service history across every workshop.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-lg-4">
+            <div class="card gl-card h-100">
+                <div class="card-body">
+                    <span class="gl-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+                    </span>
+                    <h3 class="h5 card-title">WOF and rego reminders</h3>
+                    <p class="card-text text-body-secondary mb-0">Track WOF and registration expiry dates and get a clear warning when one is coming up or has already run out.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-lg-4">
+            <div class="card gl-card h-100">
+                <div class="card-body">
+                    <span class="gl-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M9 16l2 2 4-4"/></svg>
+                    </span>
+                    <h3 class="h5 card-title">Easy bookings</h3>
+                    <p class="card-text text-body-secondary mb-0">Pick a workshop, choose a free one-hour slot and book your vehicle in. You can change or cancel until the booking starts.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-lg-4">
+            <div class="card gl-card h-100">
+                <div class="card-body">
+                    <span class="gl-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/></svg>
+                    </span>
+                    <h3 class="h5 card-title">Job cards</h3>
+                    <p class="card-text text-body-secondary mb-0">Mechanics keep track of the work done on each vehicle, so the service history is always up to date.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-lg-4">
+            <div class="card gl-card h-100">
+                <div class="card-body">
+                    <span class="gl-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>
+                    </span>
+                    <h3 class="h5 card-title">Parts and stock</h3>
+                    <p class="card-text text-body-secondary mb-0">Staff can search the parts library and see what each workshop and the central parts warehouse has in stock.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-lg-4">
+            <div class="card gl-card h-100">
+                <div class="card-body">
+                    <span class="gl-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+                    </span>
+                    <h3 class="h5 card-title">Safe and private</h3>
+                    <p class="card-text text-body-secondary mb-0">Customers only see their own vehicles and bookings, and every account has to verify its email address.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+{# ---------- How it works ---------- #}
+<section class="mb-5" aria-labelledby="steps-title">
+    <div class="text-center mb-4">
+        <h2 class="h1 fw-bold" id="steps-title">How it works</h2>
+    </div>
+    <div class="row g-4 text-center">
+        <div class="col-md-4">
+            <span class="gl-step-number" aria-hidden="true">1</span>
+            <h3 class="h5">Add your vehicle</h3>
+            <p class="text-body-secondary mb-0">Create an account and enter your number plate, vehicle details and WOF and rego dates.</p>
+        </div>
+        <div class="col-md-4">
+            <span class="gl-step-number" aria-hidden="true">2</span>
+            <h3 class="h5">Book a service</h3>
+            <p class="text-body-secondary mb-0">Choose a workshop and a time that suits you. The workshop confirms it.</p>
+        </div>
+        <div class="col-md-4">
+            <span class="gl-step-number" aria-hidden="true">3</span>
+            <h3 class="h5">Keep the history</h3>
+            <p class="text-body-secondary mb-0">After the job, the work is saved on your vehicle's record for next time.</p>
+        </div>
+    </div>
+</section>
+
+{# ---------- Who it is for ---------- #}
+<section class="mb-5" aria-labelledby="roles-title">
+    <div class="text-center mb-4">
+        <h2 class="h1 fw-bold" id="roles-title">Made for everyone in the workshop</h2>
+    </div>
+    <div class="row g-4">
+        <div class="col-md-4">
+            <div class="card gl-card h-100 border-top border-primary border-3">
+                <div class="card-body">
+                    <h3 class="h5 card-title">Customers</h3>
+                    <p class="card-text text-body-secondary mb-0">Look after your vehicles, book services and never miss a WOF or registration date.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card gl-card h-100 border-top border-primary border-3">
+                <div class="card-body">
+                    <h3 class="h5 card-title">Mechanics</h3>
+                    <p class="card-text text-body-secondary mb-0">See your workshop's bookings, look up any vehicle by number plate and check parts stock.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card gl-card h-100 border-top border-primary border-3">
+                <div class="card-body">
+                    <h3 class="h5 card-title">Admins</h3>
+                    <p class="card-text text-body-secondary mb-0">Manage users and workshops, and keep an eye on everything across the whole business.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+{# ---------- Call to action ---------- #}
+<section class="gl-cta text-center px-3 px-md-5 py-5 mb-2" aria-labelledby="cta-title">
+    {% if user.is_authenticated %}
+    <h2 class="h2 fw-bold" id="cta-title">Welcome back</h2>
+    <p class="mb-4">Pick up where you left off.</p>
+    <a class="btn btn-light btn-lg" href="{% url 'dashboard' %}">Go to your dashboard</a>
+    {% else %}
+    <h2 class="h2 fw-bold" id="cta-title">Ready to get started?</h2>
+    <p class="mb-4">Create an account in a minute and add your first vehicle.</p>
+    <div class="d-flex flex-wrap justify-content-center gap-2">
+        <a class="btn btn-light btn-lg" href="{% url 'accounts:signup' %}">Create an account</a>
+        <a class="btn btn-outline-light btn-lg" href="{% url 'accounts:login' %}">Log in</a>
+    </div>
+    {% endif %}
+</section>
 {% endblock %}
