@@ -33,6 +33,21 @@
         color: #d1d5db;
     }
 
+    .gl-logo-mark {
+        width: 5rem;
+        height: auto;
+        flex-shrink: 0;
+        filter: drop-shadow(0 0 18px rgba(0, 163, 255, 0.55));
+    }
+
+    .gl-wordmark-log {
+        color: #4cb8ff;
+        background: linear-gradient(135deg, #2b9bf0, #6fd0ff);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+
     .gl-badge {
         display: inline-block;
         padding: 0.3rem 0.8rem;
@@ -123,7 +138,27 @@
 {# ---------- Hero ---------- #}
 <section class="gl-hero text-center px-3 px-md-5 py-5 mb-5" aria-labelledby="home-title">
     <span class="gl-badge mb-3">Built for independent workshops</span>
-    <h1 class="display-4 fw-bold" id="home-title">GarageLog</h1>
+    <div class="d-flex flex-wrap justify-content-center align-items-center gap-3 mb-2">
+        <svg class="gl-logo-mark" viewBox="0 0 124 126" aria-hidden="true" focusable="false">
+            <defs>
+                <linearGradient id="glHeroGrad" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#0078D4"/>
+                    <stop offset="100%" stop-color="#00A3FF"/>
+                </linearGradient>
+            </defs>
+            <g transform="translate(8, 8)">
+                <path d="M 10 46 L 56 10 L 102 46" fill="none" stroke="url(#glHeroGrad)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M 14 46 L 14 96 C 14 104 20 110 28 110 L 84 110 C 92 110 98 104 98 96 L 98 46 Z" fill="url(#glHeroGrad)"/>
+                <g fill="#FFFFFF">
+                    <rect x="24" y="58" width="40" height="6" rx="3"/>
+                    <rect x="24" y="74" width="40" height="6" rx="3"/>
+                    <rect x="24" y="90" width="24" height="6" rx="3"/>
+                </g>
+                <path d="M 54 78 L 68 92 L 92 62" fill="none" stroke="#1F2937" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+            </g>
+        </svg>
+        <h1 class="display-4 fw-bold mb-0" id="home-title">Garage<span class="gl-wordmark-log">Log</span></h1>
+    </div>
     <p class="lead mx-auto mb-4" style="max-width: 40rem;">Vehicle service history, bookings and WOF and registration reminders for independent workshops.</p>
     <div class="d-flex flex-wrap justify-content-center gap-2 mb-5">
         {% if user.is_authenticated %}
