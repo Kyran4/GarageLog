@@ -43,12 +43,26 @@ class BookingListView(BookingQuerysetMixin, ListView):
         user = self.request.user
         return user.is_admin_role or user.is_mechanic
 
+
     def get_queryset(self):
-        bookings = super().get_queryset().order_by("-booking_date", "-booking_time")
-        status = self.request.GET.get("status", "")
-        if self._is_staff() and status in dict(Booking.STATUS_CHOICES):
-            bookings = bookings.filter(status=status)
+        bookings = super().get_queryset().order_by(
+            "-booking_date", "-booking_time"
+        )
+
+        user = self.request.user
+
+        # Hide cancelled bookings from customers only
+        if user.is_customer:
+            bookings = bookings.exclude(status="CANCELLED")
+
+        # Staff (mechanics and admins) can filter by status
+        if self._is_staff():
+            status = self.request.GET.get("status", "")
+            if status in dict(Booking.STATUS_CHOICES):
+                bookings = bookings.filter(status=status)
+
         return bookings
+
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
