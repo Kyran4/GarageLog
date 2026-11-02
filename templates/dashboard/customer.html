@@ -3,11 +3,14 @@
 {% block title %}Customer dashboard | GarageLog{% endblock %}
 
 {% block content %}
-<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-1">
-    <h1 class="h2 mb-0">Welcome, {{ user.first_name|default:user.username }}</h1>
-    <a class="btn btn-primary" href="{% url 'create_booking' %}">Book a service</a>
+{% include 'includes/theme.html' %}
+<div class="gl-banner">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-1">
+        <h1 class="h2 mb-0">Welcome, {{ user.first_name|default:user.username }}</h1>
+        <a class="btn btn-light" href="{% url 'create_booking' %}">Book a service</a>
+    </div>
+    <p class="text-body-secondary mb-0">Customer dashboard</p>
 </div>
-<p class="text-body-secondary">Customer dashboard</p>
 
 <div class="row g-3 mb-4">
     {% include 'dashboard/_link_card.html' with slug='vehicles' title='My vehicles' count=vehicle_count text='Your vehicles and their WoF and registration dates.' url=vehicles_url link_text='View vehicles' %}
