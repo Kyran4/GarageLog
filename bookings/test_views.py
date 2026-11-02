@@ -643,3 +643,92 @@ def test_admin_dashboard_link_to_workshops_uses_the_admin_site(client, admin_use
     client.force_login(admin_user)
     body = client.get(reverse('admin_dashboard')).content.decode()
     assert reverse('admin:workshops_workshop_changelist') in body
+
+
+# ---------------------------------------------------------------- the parts warehouse takes no bookings
+
+
+def test_customers_are_not_offered_the_warehouse(client, customer, vehicle, workshop, warehouse):
+    client.force_login(customer)
+
+    form = client.get(reverse('create_booking')).context['form']
+
+    assert set(form.fields['workshop'].queryset) == {workshop}
+    assert str(form['workshop'].value()) == str(workshop.pk)  # the only bookable workshop is preselected
+
+
+def test_a_customer_cannot_book_at_the_warehouse_by_posting_its_id(client, customer, vehicle, warehouse, booking_data):
+    client.force_login(customer)
+
+    response = client.post(reverse('create_booking'), booking_data(vehicle, workshop=warehouse.pk))
+
+    assert response.status_code == 200
+    assert 'workshop' in response.context['form'].errors
+    assert not Booking.objects.exists()
+
+
+def test_when_only_the_warehouse_exists_customers_are_told_no_workshops_are_taking_bookings(
+        client, customer, vehicle, warehouse):
+    client.force_login(customer)
+
+    response = client.get(reverse('create_booking'), follow=True)
+
+    assert response.redirect_chain[0][0] == reverse('dashboard')  # then on to the role's own dashboard
+    assert 'No workshops are taking bookings' in response.content.decode()
+
+
+def test_admins_are_not_offered_the_warehouse_either(client, admin_user, customer, vehicle, workshop, warehouse, booking_data):
+    client.force_login(admin_user)
+
+    form = client.get(reverse('create_booking')).context['form']
+    assert set(form.fields['workshop'].queryset) == {workshop}
+
+    response = client.post(reverse('create_booking'), booking_data(
+        vehicle, customer=customer.pk, workshop=warehouse.pk, status='PENDING',
+    ))
+    assert response.status_code == 200 and not Booking.objects.exists()
+
+
+def test_warehouse_staff_cannot_make_bookings(client, warehouse_staff, customer, vehicle):
+    client.force_login(warehouse_staff)
+
+    response = client.get(reverse('create_booking'), follow=True)
+
+    assert response.redirect_chain[0][0] == reverse('dashboard')  # then on to the role's own dashboard
+    assert "parts warehouse and doesn't take bookings" in response.content.decode().replace('&#x27;', "'")
+
+
+def test_an_old_booking_at_a_workshop_that_became_the_warehouse_can_still_be_closed_off(
+        client, admin_user, customer, vehicle, warehouse, make_booking, booking_data):
+    old = make_booking(customer, vehicle, workshop=warehouse, status='CONFIRMED')
+    client.force_login(admin_user)
+
+    keep_active = client.post(
+        reverse('booking_edit', kwargs={'pk': old.pk}),
+        booking_data(vehicle, customer=customer.pk, workshop=warehouse.pk, status='CONFIRMED'),
+    )
+    assert keep_active.status_code == 200
+    assert "parts warehouse and doesn't take bookings" in keep_active.content.decode().replace('&#x27;', "'")
+
+    cancel = client.post(
+        reverse('booking_edit', kwargs={'pk': old.pk}),
+        booking_data(vehicle, customer=customer.pk, workshop=warehouse.pk, status='CANCELLED'),
+    )
+    assert cancel.status_code == 302
+    old.refresh_from_db()
+    assert old.status == 'CANCELLED'
+
+
+def test_an_admin_can_move_an_old_warehouse_booking_to_a_real_workshop(
+        client, admin_user, customer, vehicle, workshop, warehouse, make_booking, booking_data):
+    old = make_booking(customer, vehicle, workshop=warehouse, status='CONFIRMED')
+    client.force_login(admin_user)
+
+    response = client.post(
+        reverse('booking_edit', kwargs={'pk': old.pk}),
+        booking_data(vehicle, customer=customer.pk, workshop=workshop.pk, status='CONFIRMED'),
+    )
+
+    assert response.status_code == 302
+    old.refresh_from_db()
+    assert old.workshop == workshop

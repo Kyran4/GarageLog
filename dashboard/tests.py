@@ -252,3 +252,75 @@ def test_admin_user_table_shows_each_mechanics_workshop(client, admin_user, mech
     client.force_login(admin_user)
     body = client.get(reverse('admin_dashboard')).content.decode()
     assert 'Central Workshop' in body
+
+
+# ---------------------------------------------------------------- the parts warehouse
+
+
+def test_warehouse_staff_dashboard_is_about_stock_not_bookings(client, warehouse_staff, warehouse, customer, vehicle, make_booking, make_part, make_stock):
+    make_booking(customer, vehicle, workshop=warehouse)  # an old booking from before it became the warehouse
+    low = make_part('LOW-1', universal=True)
+    make_stock(warehouse, low, quantity=1, reorder_level=10)
+    client.force_login(warehouse_staff)
+
+    response = client.get(reverse('mechanic_dashboard'))
+
+    body = response.content.decode()
+    assert response.status_code == 200
+    assert response.context['is_warehouse'] is True
+    assert response.context['upcoming_count'] == 0
+    assert response.context['low_stock_count'] == 1
+    assert '(parts warehouse)' in body
+    assert 'Low or out of stock' in body and 'Find parts' in body
+    assert 'Upcoming bookings' not in body and 'Next bookings' not in body
+    assert 'Job cards' not in body and 'Find a vehicle' not in body
+
+
+def test_a_normal_mechanic_dashboard_is_unchanged_by_the_warehouse(client, mechanic, warehouse):
+    client.force_login(mechanic)
+
+    response = client.get(reverse('mechanic_dashboard'))
+
+    assert response.context['is_warehouse'] is False
+    body = response.content.decode()
+    assert 'Upcoming bookings at your workshop' in body and 'Find a vehicle' in body
+
+
+def test_admin_dashboard_lists_the_warehouse_separately(client, admin_user, workshop, other_workshop, warehouse, make_part, make_stock):
+    make_stock(warehouse, make_part('A', universal=True))
+    make_stock(warehouse, make_part('B', universal=True))
+    client.force_login(admin_user)
+
+    response = client.get(reverse('admin_dashboard'))
+
+    assert response.context['workshop_count'] == 2  # the warehouse is not one of the workshops that take bookings
+    assert len(response.context['workshop_rows']) == 3
+    assert response.context['warehouse'] == warehouse
+    assert response.context['warehouse_stock_count'] == 2
+    body = response.content.decode()
+    assert 'Parts warehouse stock' in body
+    assert f"{reverse('inventory:stock')}?workshop={warehouse.pk}" in body
+    assert 'No bookings' not in body  # the warehouse row doesn't talk about bookings at all
+
+
+def test_admin_dashboard_without_a_warehouse_has_no_warehouse_card(client, admin_user, workshop):
+    client.force_login(admin_user)
+
+    response = client.get(reverse('admin_dashboard'))
+
+    assert response.context['warehouse'] is None
+    assert 'Parts warehouse stock' not in response.content.decode()
+
+
+def test_the_warehouse_row_has_no_hours_mechanics_or_bookings(client, admin_user, workshop, warehouse, make_user):
+    make_user('m1', User.Role.MECHANIC)
+    client.force_login(admin_user)
+
+    body = client.get(reverse('admin_dashboard')).content.decode()
+    rows = body.split('<tbody>')[1].split('</tbody>')[0].split('<tr>')[1:]
+    warehouse_row = next(row for row in rows if 'Parts Warehouse' in row)
+    workshop_row = next(row for row in rows if 'Central Workshop' in row)
+
+    assert warehouse_row.count('Not applicable') == 3  # hours, mechanics and upcoming bookings
+    assert 'Monday' not in warehouse_row and 'bookings' not in warehouse_row.lower()
+    assert 'Monday to Friday' in workshop_row and 'Not applicable' not in workshop_row  # workshops are unchanged

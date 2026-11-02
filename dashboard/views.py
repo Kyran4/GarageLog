@@ -66,9 +66,11 @@ class MechanicDashboardView(MechanicRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         user = self.request.user
-        # A mechanic works with the bookings at their own workshop.
-        upcoming = upcoming_bookings(workshop_id=user.workshop_id) if user.workshop_id else []
+        # A mechanic works with the bookings at their own workshop. The parts warehouse takes no bookings.
+        is_warehouse = bool(user.workshop_id and user.workshop.is_parts_warehouse)
+        upcoming = upcoming_bookings(workshop_id=user.workshop_id) if user.workshop_id and not is_warehouse else []
         context['workshop'] = user.workshop
+        context['is_warehouse'] = is_warehouse
         context['upcoming_count'] = len(upcoming)
         context['assigned_count'] = len([booking for booking in upcoming if booking.mechanic_id == user.pk])
         context['next_bookings'] = upcoming[:5]
@@ -117,7 +119,13 @@ class AdminDashboardView(AdminRequiredMixin, ListView):
             }
             for workshop in workshops
         ]
-        context['workshop_count'] = len(context['workshop_rows'])
+        # The headline count is of workshops that take bookings; the parts warehouse is listed separately.
+        context['workshop_count'] = len([row for row in context['workshop_rows'] if not row['workshop'].is_parts_warehouse])
+        warehouse = Workshop.get_warehouse()
+        context['warehouse'] = warehouse
+        if warehouse:
+            context['warehouse_stock_count'] = StockItem.objects.filter(workshop=warehouse).count()
+            context['warehouse_stock_url'] = reverse('inventory:stock') + f'?workshop={warehouse.pk}'
         context['workshops_admin_url'] = reverse('admin:workshops_workshop_changelist')
         context['part_count'] = Part.objects.filter(is_active=True).count()
         context['parts_url'] = reverse('inventory:search')

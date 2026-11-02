@@ -5,7 +5,9 @@
 {% block content %}
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
     <h1 class="h2 mb-0">Find parts</h1>
-    <a class="btn btn-outline-primary" href="{% url 'inventory:stock' %}{{ workshop_query }}">{% if workshop %}{{ workshop.name }} stock{% else %}Workshop stock{% endif %}</a>
+    {% if user.is_mechanic and workshop %}
+    <a class="btn btn-outline-primary" href="{% url 'inventory:stock' %}">{{ workshop.name }} stock</a>
+    {% endif %}
 </div>
 
 <form method="get" role="search" aria-label="Search the parts library" class="card card-body mb-4" novalidate>
@@ -93,6 +95,7 @@
                 <th scope="col">Fits</th>
                 <th scope="col">Price</th>
                 <th scope="col">Stock{% if workshop %} at {{ workshop.name }}{% endif %}</th>
+                {% if warehouse %}<th scope="col">At {{ warehouse.name }}</th>{% endif %}
             </tr>
         </thead>
         <tbody>
@@ -114,6 +117,14 @@
                         <a class="ms-1" href="{% url 'inventory:stock_add' %}?part={{ part.pk }}{% if workshop_query %}&amp;workshop={{ workshop.pk }}{% endif %}">Add<span class="visually-hidden"> {{ part.part_number }} to stock</span></a>
                     {% else %}<span class="text-body-secondary">No workshop</span>{% endif %}
                 </td>
+                {% if warehouse %}
+                <td>
+                    {% if part.warehouse_stock %}
+                        {% if part.warehouse_stock.is_out %}<span class="badge text-bg-danger">Out of stock</span>
+                        {% else %}<span class="badge text-bg-secondary">{{ part.warehouse_stock.quantity }} in stock</span>{% endif %}
+                    {% else %}<span class="text-body-secondary">Not stocked</span>{% endif %}
+                </td>
+                {% endif %}
             </tr>
             {% endfor %}
         </tbody>

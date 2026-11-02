@@ -97,6 +97,13 @@ class Booking(models.Model):
             return
 
         errors = {}
+        if self.workshop.is_parts_warehouse:
+            raise ValidationError({
+                NON_FIELD_ERRORS: [
+                    f"{self.workshop.name} is the parts warehouse and doesn't take bookings. "
+                    f"Choose a workshop instead.",
+                ],
+            })
         if scheduling.booked_count(self.workshop, self.booking_date, self.booking_time, self.pk) \
                 >= scheduling.capacity(self.workshop):
             errors["booking_time"] = "That time is fully booked. Please choose another time."

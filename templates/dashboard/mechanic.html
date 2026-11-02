@@ -4,26 +4,28 @@
 
 {% block content %}
 <h1 class="h2">Welcome, {{ user.first_name|default:user.username }}</h1>
-<p class="text-body-secondary">Mechanic dashboard{% if workshop %} &ndash; {{ workshop.name }}{% endif %}</p>
+<p class="text-body-secondary">Mechanic dashboard{% if workshop %} &ndash; {{ workshop.name }}{% if is_warehouse %} (parts warehouse){% endif %}{% endif %}</p>
 
 {% if not workshop %}
 <div class="alert alert-warning" role="status">You aren't assigned to a workshop yet. Ask an admin to assign you so you can see and make bookings.</div>
 {% endif %}
 
 <div class="row g-3 mb-4">
-    {% if workshop %}
+    {% if workshop and not is_warehouse %}
     {% include 'dashboard/_link_card.html' with slug='upcoming' title='Upcoming bookings at your workshop' count=upcoming_count text='Active bookings that have not happened yet.' url=bookings_url link_text='View bookings' %}
     {% include 'dashboard/_link_card.html' with slug='assigned' title='Assigned to you' count=assigned_count text='Upcoming bookings where you are the mechanic.' url=bookings_url link_text='View bookings' %}
     {% endif %}
     {% if workshop %}
-    {% include 'dashboard/_link_card.html' with slug='lowstock' title='Low or out of stock' count=low_stock_count text='Parts at your workshop at or below their reorder level.' url=low_stock_url link_text='View low stock' %}
+    {% include 'dashboard/_link_card.html' with slug='lowstock' title='Low or out of stock' count=low_stock_count text='Parts at or below their reorder level.' url=low_stock_url link_text='View low stock' %}
     {% endif %}
     {% include 'dashboard/_action_card.html' with slug='parts' title='Find parts' text='Search the parts library by plate, or by make and model, and see what your workshop has in stock.' url=parts_url link_text='Search parts' %}
+    {% if not is_warehouse %}
     {% include 'dashboard/_action_card.html' with slug='find' title='Find a vehicle' text='Look up any vehicle in GarageLog by number plate and read its service history.' url=vehicles_url link_text='Search vehicles' %}
     {% include 'dashboard/_placeholder_card.html' with slug='jobs' title='Job cards' text='Update job status, notes and parts used.' %}
+    {% endif %}
 </div>
 
-{% if workshop %}
+{% if workshop and not is_warehouse %}
 <section aria-labelledby="next-heading">
     <h2 class="h5" id="next-heading">Next bookings at {{ workshop.name }}</h2>
     {% if next_bookings %}

@@ -73,7 +73,7 @@ class BookingForm(BootstrapFormMixin, forms.ModelForm):
     own_vehicles_only = True
 
     workshop = WorkshopChoiceField(
-        queryset=Workshop.objects.filter(is_active=True),
+        queryset=Workshop.objects.bookable(),
         empty_label="Select a workshop",
     )
 
@@ -144,8 +144,9 @@ class BookingForm(BootstrapFormMixin, forms.ModelForm):
         if user is not None and self.own_vehicles_only:
             self.fields["vehicle"].queryset = Vehicle.objects.filter(owner=user)
 
-        # A workshop that has since been deactivated stays valid for bookings already made there.
-        workshops = Workshop.objects.filter(Q(is_active=True) | Q(pk=booking.workshop_id))
+        # The parts warehouse never takes bookings. A workshop that has since been deactivated (or turned
+        # into the warehouse) stays valid for bookings already made there, so they can still be edited.
+        workshops = Workshop.objects.filter(Q(is_active=True, is_parts_warehouse=False) | Q(pk=booking.workshop_id))
         self.fields["workshop"].queryset = workshops
         self.fields["booking_time"].choices = [("", "Select a time")] + scheduling.all_slot_choices(workshops)
 
