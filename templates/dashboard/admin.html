@@ -20,6 +20,9 @@
     {% include 'dashboard/_link_card.html' with slug='bookings' title='Bookings awaiting confirmation' count=pending_count text='Pending bookings that need confirming and a mechanic.' url=pending_url link_text='Review pending bookings' %}
     {% include 'dashboard/_link_card.html' with slug='allbookings' title='Upcoming bookings' count=upcoming_count text='Active bookings that have not happened yet.' url=bookings_url link_text='View all bookings' %}
     {% include 'dashboard/_link_card.html' with slug='workshops' title='Workshops' count=workshop_count text='Workshops that take bookings. Add workshops and assign mechanics in the Django admin.' url=workshops_admin_url link_text='Manage workshops' %}
+    {% if warehouse %}
+    {% include 'dashboard/_link_card.html' with slug='warehouse' title='Parts warehouse stock' count=warehouse_stock_count text='Parts held at the warehouse that supplies the workshops.' url=warehouse_stock_url link_text='View warehouse stock' %}
+    {% endif %}
     {% include 'dashboard/_link_card.html' with slug='vehicles' title='Vehicles' count=vehicle_count text='Vehicles registered with the workshop.' url=vehicles_url link_text='View vehicles' %}
     {% include 'dashboard/_link_card.html' with slug='parts' title='Parts library' count=part_count text='Parts in the shared catalogue. Each workshop keeps its own stock of them.' url=parts_url link_text='Search parts and stock' %}
     {% include 'dashboard/_placeholder_card.html' with slug='analytics' title='Analytics' text='Bookings, revenue and upcoming expiries.' %}
@@ -30,7 +33,7 @@
     {% if workshop_rows %}
     <div class="table-responsive">
         <table class="table align-middle">
-            <caption class="visually-hidden">Workshops with their mechanics and upcoming bookings</caption>
+            <caption class="visually-hidden">Workshops and the parts warehouse, with their opening hours, mechanics and upcoming bookings</caption>
             <thead>
                 <tr>
                     <th scope="col">Workshop</th>
@@ -43,10 +46,17 @@
             <tbody>
                 {% for row in workshop_rows %}
                 <tr>
-                    <th scope="row">{{ row.workshop.name }}</th>
+                    <th scope="row">{{ row.workshop.name }}{% if row.workshop.is_parts_warehouse %} <span class="badge text-bg-secondary">Parts warehouse</span>{% endif %}</th>
+                    {% if row.workshop.is_parts_warehouse %}
+                    {# The warehouse has no opening hours, mechanics or bookings to report. #}
+                    <td><span aria-hidden="true">-</span><span class="visually-hidden">Not applicable</span></td>
+                    <td><span aria-hidden="true">-</span><span class="visually-hidden">Not applicable</span></td>
+                    <td><span aria-hidden="true">-</span><span class="visually-hidden">Not applicable</span></td>
+                    {% else %}
                     <td>{{ row.workshop.hours_text }}</td>
                     <td>{{ row.mechanics }}</td>
                     <td>{{ row.upcoming }}</td>
+                    {% endif %}
                     <td>{% if row.workshop.is_active %}Active{% else %}Inactive{% endif %}</td>
                 </tr>
                 {% endfor %}

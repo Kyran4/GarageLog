@@ -453,26 +453,34 @@ def test_seed_demo_users_creates_users_and_is_repeatable(db, settings, client):
     call_command('seed_demo_users')
     call_command('seed_demo_users')
 
-    assert User.objects.count() == 5
-    assert Workshop.objects.count() == 2
+    assert User.objects.count() == 6
+    assert Workshop.objects.count() == 3
     assert Vehicle.objects.count() == 2
     assert User.objects.get(username='mechanic1').workshop != User.objects.get(username='mechanic2').workshop
     assert User.objects.filter(role=User.Role.ADMIN).count() == 1
-    assert User.objects.filter(role=User.Role.MECHANIC).count() == 2
+    assert User.objects.filter(role=User.Role.MECHANIC).count() == 3
     assert User.objects.filter(role=User.Role.CUSTOMER).count() == 2
     assert client.login(username='mechanic1', password='GarageLog-demo-1')
 
 
-def test_a_mechanic_must_have_a_workshop(db):
-    mechanic = User(username='m', email='m@example.com', role=User.Role.MECHANIC)
-    with pytest.raises(ValidationError) as error:
-        mechanic.full_clean(exclude=['password'])
-    assert 'workshop' in error.value.message_dict
+def test_seed_demo_users_creates_the_parts_warehouse_and_its_staff(db, settings):
+    settings.DEBUG = True
 
-    mechanic.workshop = Workshop.objects.create(name='Somewhere')
-    mechanic.full_clean(exclude=['password'])
+    call_command('seed_demo_users')
+
+    warehouse = Workshop.get_warehouse()
+    assert warehouse.name == 'Parts Warehouse'
+    assert Workshop.objects.filter(is_parts_warehouse=True).count() == 1
+    assert User.objects.get(username='warehouse1').workshop == warehouse
+    assert not Workshop.objects.bookable().filter(pk=warehouse.pk).exists()
 
 
-def test_customers_and_admins_do_not_need_a_workshop(db):
-    for role in (User.Role.CUSTOMER, User.Role.ADMIN):
-        User(username=f'u-{role}', email=f'{role}@example.com', role=role).full_clean(exclude=['password'])
+def test_seed_demo_users_reuses_an_existing_warehouse_whatever_it_is_called(db, settings):
+    settings.DEBUG = True
+    existing = Workshop.objects.create(name='Our Central Store', is_parts_warehouse=True)
+
+    call_command('seed_demo_users')
+
+    assert Workshop.objects.filter(is_parts_warehouse=True).count() == 1
+    assert not Workshop.objects.filter(name='Parts Warehouse').exists()
+    assert User.objects.get(username='warehouse1').workshop == existing

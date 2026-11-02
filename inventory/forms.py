@@ -7,6 +7,11 @@ from workshops.models import Workshop
 from .models import Part, PartFitment, StockItem
 
 
+class StockLocationField(forms.ModelChoiceField):
+    def label_from_instance(self, obj):
+        return f'{obj.name} (parts warehouse)' if obj.is_parts_warehouse else obj.name
+
+
 class PartSearchForm(BootstrapFormMixin, forms.Form):
     """Find parts by vehicle (plate, or make and model) and/or by name, category and stock."""
 
@@ -27,7 +32,7 @@ class PartSearchForm(BootstrapFormMixin, forms.Form):
         required=False, label='Category', choices=[('', 'All categories')] + Part.Category.choices,
     )
     in_stock = forms.BooleanField(required=False, label='Only parts in stock')
-    workshop = forms.ModelChoiceField(
+    workshop = StockLocationField(
         queryset=Workshop.objects.all(), required=False, empty_label=None, label='Workshop stock to show',
     )
 

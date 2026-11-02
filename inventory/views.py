@@ -100,6 +100,19 @@ class PartSearchView(StaffOnlyMixin, WorkshopScopeMixin, ListView):
             part.workshop_stock = stock.get(part.pk)
         context['parts'] = parts
 
+        # What the parts warehouse holds, shown beside the workshop's own stock (read-only).
+        warehouse = Workshop.get_warehouse()
+        if warehouse is not None and warehouse == workshop:
+            warehouse = None  # the warehouse's own staff already see its stock in the main column
+        if warehouse is not None:
+            held = {
+                item.part_id: item
+                for item in StockItem.objects.filter(workshop=warehouse, part__in=parts)
+            }
+            for part in parts:
+                part.warehouse_stock = held.get(part.pk)
+        context['warehouse'] = warehouse
+
         query = QueryDict(mutable=True)
         query.update({key: value for key, value in self.request.GET.items() if key != 'page' and value})
         context.update({
@@ -125,8 +138,12 @@ class PartDetailView(StaffOnlyMixin, WorkshopScopeMixin, DetailView):
         user = self.request.user
         stock = StockItem.objects.filter(part=self.object).select_related('workshop')
         if user.is_mechanic:
-            stock = stock.filter(workshop_id=user.workshop_id)  # a mechanic sees their own workshop's stock only
-        context['stock_rows'] = stock.order_by('workshop__name')
+            # A mechanic sees their own workshop's stock, plus what the parts warehouse holds.
+            stock = stock.filter(Q(workshop_id=user.workshop_id) | Q(workshop__is_parts_warehouse=True))
+        rows = list(stock.order_by('workshop__name'))
+        for item in rows:
+            item.can_edit = user.is_admin_role or item.workshop_id == user.workshop_id
+        context['stock_rows'] = rows
         context['workshop'] = self.get_workshop()
         context['already_stocked'] = (
             context['workshop'] is not None

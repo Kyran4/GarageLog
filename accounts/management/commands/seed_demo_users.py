@@ -13,11 +13,14 @@ DEMO_WORKSHOPS = [
     ('North Shore Workshop', '2 Example Road, Takapuna, Auckland', '09 000 0002'),
 ]
 
+DEMO_WAREHOUSE = ('Parts Warehouse', '3 Sample Avenue, Penrose, Auckland', '09 000 0003')
+
 DEMO_USERS = [
     # username, role, first name, last name, is_admin, workshop name
     ('admin', User.Role.ADMIN, 'Alex', 'Admin', True, None),
     ('mechanic1', User.Role.MECHANIC, 'Mia', 'Mechanic', False, 'Auckland Central Workshop'),
     ('mechanic2', User.Role.MECHANIC, 'Tane', 'Mechanic', False, 'North Shore Workshop'),
+    ('warehouse1', User.Role.MECHANIC, 'Wiremu', 'Warehouse', False, DEMO_WAREHOUSE[0]),
     ('customer1', User.Role.CUSTOMER, 'Casey', 'Customer', False, None),
     ('customer2', User.Role.CUSTOMER, 'Sam', 'Customer', False, None),
 ]
@@ -31,8 +34,8 @@ DEMO_VEHICLES = [
 
 class Command(BaseCommand):
     help = (
-        'Create (or reset) demo data for development: 2 workshops, 1 admin, 2 mechanics (one per workshop), '
-        '2 customers and a vehicle for each customer.'
+        'Create (or reset) demo data for development: 2 workshops and the parts warehouse, 1 admin, 2 mechanics (one per '
+        'workshop), 1 warehouse staff member, 2 customers and a vehicle for each customer.'
     )
 
     def add_arguments(self, parser):
@@ -55,6 +58,20 @@ class Command(BaseCommand):
             )
             workshops[name] = workshop
             self.stdout.write(f"{'Created' if created else 'Found'} workshop '{name}'")
+
+        # The parts warehouse. If this database already has one (under any name), use that one.
+        warehouse = Workshop.get_warehouse()
+        if warehouse is None:
+            name, address, phone = DEMO_WAREHOUSE
+            warehouse, created = Workshop.objects.get_or_create(
+                name=name, defaults={'address': address, 'phone': phone},
+            )
+            warehouse.is_parts_warehouse = True
+            warehouse.save()
+            self.stdout.write(f"{'Created' if created else 'Marked'} parts warehouse '{name}'")
+        else:
+            self.stdout.write(f"Found parts warehouse '{warehouse.name}'")
+        workshops[DEMO_WAREHOUSE[0]] = warehouse
 
         users = {}
         for username, role, first_name, last_name, is_admin, workshop_name in DEMO_USERS:

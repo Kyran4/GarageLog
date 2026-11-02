@@ -2,12 +2,23 @@ import datetime
 
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
 
 WEEKDAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
 
+class WorkshopQuerySet(models.QuerySet):
+    def bookable(self):
+        """Locations customers can book: active, and not the parts warehouse."""
+        return self.filter(is_active=True, is_parts_warehouse=False)
+
+
 class Workshop(models.Model):
-    """A workshop that takes bookings. Mechanics belong to one workshop; parts stock is kept per workshop."""
+    """A location that holds parts stock and has staff. Most are workshops that take bookings.
+
+    One location can be marked as the parts warehouse: the central store that supplies the
+    workshops. It holds stock but does not take customer bookings.
+    """
 
     name = models.CharField(max_length=100, unique=True)
     address = models.CharField(max_length=200, blank=True)
@@ -21,10 +32,28 @@ class Workshop(models.Model):
         default=True,
         help_text='Inactive workshops cannot be chosen for new bookings.',
     )
+    is_parts_warehouse = models.BooleanField(
+        'parts warehouse',
+        default=False,
+        help_text=(
+            'The central parts warehouse. It holds parts stock that workshops can check, and it does not '
+            'take customer bookings. Only one location can be the parts warehouse.'
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
+
+    objects = WorkshopQuerySet.as_manager()
 
     class Meta:
         ordering = ['name']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['is_parts_warehouse'],
+                condition=Q(is_parts_warehouse=True),
+                name='single_parts_warehouse',
+                violation_error_message='There is already a parts warehouse.',
+            ),
+        ]
 
     def __str__(self):
         return self.name
@@ -33,6 +62,19 @@ class Workshop(models.Model):
         super().clean()
         if self.open_time and self.close_time and not self.slot_starts():
             raise ValidationError('The closing time must leave room for at least one booking after opening time.')
+        if self.is_parts_warehouse:
+            other = Workshop.objects.filter(is_parts_warehouse=True).exclude(pk=self.pk).first()
+            if other:
+                raise ValidationError({'is_parts_warehouse': f'{other.name} is already the parts warehouse.'})
+
+    @classmethod
+    def get_warehouse(cls):
+        """The parts warehouse, or None if there isn't one."""
+        return cls.objects.filter(is_parts_warehouse=True).first()
+
+    @property
+    def accepts_bookings(self):
+        return self.is_active and not self.is_parts_warehouse
 
     # ----------------------------------------------------------- opening hours
 

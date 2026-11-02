@@ -60,3 +60,80 @@ def test_workshop_names_are_unique(workshop):
 
 def test_str_is_the_name(workshop):
     assert str(workshop) == 'Central Workshop'
+
+
+# ---------------------------------------------------------------- the parts warehouse
+
+
+def test_a_location_is_a_normal_workshop_unless_marked_as_the_warehouse(workshop):
+    assert not workshop.is_parts_warehouse
+    assert workshop.accepts_bookings
+
+
+def test_the_warehouse_does_not_accept_bookings(warehouse):
+    assert warehouse.is_parts_warehouse
+    assert not warehouse.accepts_bookings
+
+
+def test_inactive_workshops_do_not_accept_bookings(make_workshop):
+    assert not make_workshop('Closed', is_active=False).accepts_bookings
+
+
+def test_bookable_leaves_out_the_warehouse_and_inactive_workshops(workshop, other_workshop, warehouse, make_workshop):
+    make_workshop('Closed', is_active=False)
+
+    assert set(Workshop.objects.bookable()) == {workshop, other_workshop}
+
+
+def test_get_warehouse_returns_it_or_none(workshop):
+    assert Workshop.get_warehouse() is None
+    shed = Workshop.objects.create(name='Shed', is_parts_warehouse=True)
+    assert Workshop.get_warehouse() == shed
+
+
+def test_there_can_only_be_one_warehouse(warehouse):
+    second = Workshop(name='Second Store', is_parts_warehouse=True)
+    with pytest.raises(ValidationError) as error:
+        second.full_clean()
+    assert 'Parts Warehouse is already the parts warehouse' in str(error.value)
+
+    from django.db import IntegrityError, transaction
+    with pytest.raises(IntegrityError), transaction.atomic():
+        Workshop.objects.create(name='Second Store', is_parts_warehouse=True)
+
+
+def test_the_warehouse_can_be_edited_without_tripping_the_one_warehouse_rule(warehouse):
+    warehouse.phone = '09 555 0000'
+    warehouse.full_clean()
+    warehouse.save()
+
+
+def test_several_ordinary_workshops_are_fine(workshop, other_workshop):
+    assert Workshop.objects.filter(is_parts_warehouse=False).count() == 2
+
+
+# ---------------------------------------------------------------- the migration's guess at an existing warehouse
+
+
+def flag(*names):
+    from importlib import import_module
+
+    from django.apps import apps
+
+    for name in names:
+        Workshop.objects.create(name=name)
+    import_module('workshops.migrations.0002_parts_warehouse').flag_existing_warehouse(apps, None)
+    return sorted(Workshop.objects.filter(is_parts_warehouse=True).values_list('name', flat=True))
+
+
+@pytest.mark.parametrize('name', ['Parts Warehouse', 'Main Warehouse', 'warehouse', 'Penrose WAREHOUSE'])
+def test_a_single_location_called_a_warehouse_is_flagged(name):
+    assert flag('Auckland Central', name) == [name]
+
+
+def test_nothing_is_flagged_when_no_name_mentions_a_warehouse():
+    assert flag('Main Workshop', 'North Shore') == []
+
+
+def test_nothing_is_flagged_when_it_is_unclear_which_is_the_warehouse():
+    assert flag('East Warehouse', 'West Warehouse') == []

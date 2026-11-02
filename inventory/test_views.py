@@ -490,3 +490,130 @@ def test_admin_dashboard_counts_active_parts(client, admin_user, corolla_parts, 
 
     assert response.context['part_count'] == 4
     assert reverse('inventory:search') in response.content.decode()
+
+
+# ---------------------------------------------------------------- the parts warehouse
+
+
+def test_search_shows_what_the_warehouse_holds_beside_the_workshops_own_stock(
+        client, mechanic, workshop, warehouse, corolla_parts, make_stock):
+    make_stock(workshop, corolla_parts['filter_old'], quantity=2)
+    make_stock(warehouse, corolla_parts['filter_old'], quantity=120)
+    make_stock(warehouse, corolla_parts['oil'], quantity=0)
+    client.force_login(mechanic)
+
+    response = client.get(reverse('inventory:search'))
+    body = response.content.decode()
+    held = {part.part_number: part.warehouse_stock for part in response.context['parts']}
+
+    assert response.context['warehouse'] == warehouse
+    assert 'At Parts Warehouse' in body
+    assert held['FIL-OLD'].quantity == 120
+    assert held['FIL-NEW'] is None
+    assert '120 in stock' in body and 'Not stocked' in body and 'Out of stock' in body
+
+
+def test_there_is_no_warehouse_column_when_there_is_no_warehouse(client, mechanic, corolla_parts):
+    client.force_login(mechanic)
+
+    response = client.get(reverse('inventory:search'))
+
+    assert response.context['warehouse'] is None
+    assert 'At Parts Warehouse' not in response.content.decode()
+
+
+def test_warehouse_staff_see_the_warehouse_stock_in_the_main_column_without_a_duplicate(
+        client, warehouse_staff, warehouse, corolla_parts, make_stock):
+    make_stock(warehouse, corolla_parts['filter_old'], quantity=90)
+    client.force_login(warehouse_staff)
+
+    response = client.get(reverse('inventory:search'))
+
+    assert response.context['workshop'] == warehouse
+    assert response.context['warehouse'] is None
+    body = response.content.decode()
+    assert '90 in stock' in body
+    assert 'At Parts Warehouse' not in body
+
+
+def test_admin_sees_the_warehouse_column_when_looking_at_a_workshop_and_labels_it_in_the_picker(
+        client, admin_user, workshop, warehouse, corolla_parts, make_stock):
+    make_stock(warehouse, corolla_parts['filter_old'], quantity=60)
+    client.force_login(admin_user)
+
+    response = client.get(reverse('inventory:search'), {'workshop': workshop.pk})
+
+    assert response.context['warehouse'] == warehouse
+    assert 'Parts Warehouse (parts warehouse)' in response.content.decode()
+
+
+def test_part_detail_shows_a_mechanic_their_own_stock_and_the_warehouses_but_not_other_workshops(
+        client, mechanic, workshop, other_workshop, warehouse, corolla_parts, make_stock):
+    part = corolla_parts['filter_old']
+    mine = make_stock(workshop, part, quantity=3)
+    theirs = make_stock(other_workshop, part, quantity=77)
+    held = make_stock(warehouse, part, quantity=150)
+    client.force_login(mechanic)
+
+    response = client.get(reverse('inventory:detail', kwargs={'pk': part.pk}))
+
+    rows = {row.workshop.name: row for row in response.context['stock_rows']}
+    assert set(rows) == {'Central Workshop', 'Parts Warehouse'}
+    assert rows['Central Workshop'].can_edit and not rows['Parts Warehouse'].can_edit
+    body = response.content.decode()
+    assert 'Parts warehouse' in body and '150' in body
+    assert reverse('inventory:stock_edit', kwargs={'pk': mine.pk}) in body
+    assert reverse('inventory:stock_edit', kwargs={'pk': held.pk}) not in body  # read-only for a workshop mechanic
+    assert reverse('inventory:stock_edit', kwargs={'pk': theirs.pk}) not in body
+    assert 'North Workshop' not in body
+
+
+def test_part_detail_lets_an_admin_edit_every_location_including_the_warehouse(
+        client, admin_user, workshop, warehouse, corolla_parts, make_stock):
+    part = corolla_parts['filter_old']
+    make_stock(workshop, part)
+    held = make_stock(warehouse, part)
+    client.force_login(admin_user)
+
+    response = client.get(reverse('inventory:detail', kwargs={'pk': part.pk}))
+
+    assert all(row.can_edit for row in response.context['stock_rows'])
+    assert reverse('inventory:stock_edit', kwargs={'pk': held.pk}) in response.content.decode()
+
+
+def test_a_workshop_mechanic_cannot_change_the_warehouses_stock(client, mechanic, warehouse, corolla_parts, make_stock):
+    held = make_stock(warehouse, corolla_parts['filter_old'], quantity=100)
+    client.force_login(mechanic)
+    url = reverse('inventory:stock_edit', kwargs={'pk': held.pk})
+
+    assert client.get(url).status_code == 404
+    assert client.post(url, {'quantity': 0, 'reorder_level': 0}).status_code == 404
+    held.refresh_from_db()
+    assert held.quantity == 100
+
+
+def test_warehouse_staff_manage_the_warehouses_stock(client, warehouse_staff, warehouse, corolla_parts, make_stock):
+    held = make_stock(warehouse, corolla_parts['filter_old'], quantity=100)
+    client.force_login(warehouse_staff)
+
+    listing = client.get(reverse('inventory:stock'))
+    assert list(listing.context['items']) == [held]
+    assert 'Parts warehouse' in listing.content.decode()
+    assert "doesn't take customer bookings" in listing.content.decode().replace('&#x27;', "'")
+
+    response = client.post(
+        reverse('inventory:stock_edit', kwargs={'pk': held.pk}), {'quantity': 80, 'reorder_level': 20},
+    )
+
+    assert response.status_code == 302
+    held.refresh_from_db()
+    assert held.quantity == 80
+
+
+def test_the_admins_stock_picker_labels_the_warehouse(client, admin_user, workshop, warehouse):
+    client.force_login(admin_user)
+
+    body = client.get(reverse('inventory:stock'), {'workshop': warehouse.pk}).content.decode()
+
+    assert 'Parts Warehouse (parts warehouse)' in body
+    assert 'Parts warehouse' in body

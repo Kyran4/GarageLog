@@ -43,6 +43,18 @@ def other_workshop(make_workshop):
 
 
 @pytest.fixture
+def warehouse(make_workshop):
+    """The central parts warehouse: holds stock, takes no bookings."""
+    return make_workshop('Parts Warehouse', is_parts_warehouse=True)
+
+
+@pytest.fixture
+def warehouse_staff(make_user, warehouse):
+    """A mechanic-role user who works at the parts warehouse."""
+    return make_user('warehouse1', User.Role.MECHANIC, workshop=warehouse)
+
+
+@pytest.fixture
 def password():
     return PASSWORD
 

@@ -126,7 +126,7 @@ class BookingCreateView(BookingSaveMixin, RoleRequiredMixin, CreateView):
         user = request.user
         if user.is_authenticated:
             if user.is_customer:
-                if not Workshop.objects.filter(is_active=True).exists():
+                if not Workshop.objects.bookable().exists():
                     messages.info(request, "No workshops are taking bookings yet. Please check back soon.")
                     return redirect("dashboard")
                 if not Vehicle.objects.filter(owner=user).exists():
@@ -135,6 +135,9 @@ class BookingCreateView(BookingSaveMixin, RoleRequiredMixin, CreateView):
             elif user.is_mechanic and not user.workshop_id:
                 messages.error(request, "You aren't assigned to a workshop yet, so you can't make bookings. "
                                         "Ask an admin to assign you.")
+                return redirect("dashboard")
+            elif user.is_mechanic and user.workshop.is_parts_warehouse:
+                messages.info(request, f"{user.workshop.name} is the parts warehouse and doesn't take bookings.")
                 return redirect("dashboard")
         return super().dispatch(request, *args, **kwargs)
 

@@ -47,12 +47,12 @@
             <tbody>
                 {% for item in stock_rows %}
                 <tr>
-                    <th scope="row">{{ item.workshop.name }}</th>
+                    <th scope="row">{{ item.workshop.name }}{% if item.workshop.is_parts_warehouse %} <span class="badge text-bg-secondary">Parts warehouse</span>{% endif %}</th>
                     <td>{{ item.quantity }}
                         {% if item.is_out %}<span class="badge text-bg-danger">Out of stock</span>{% elif item.is_low %}<span class="badge text-bg-warning">Low</span>{% endif %}</td>
                     <td>${{ item.price }}</td>
                     <td>{{ item.bin_location|default:"-" }}</td>
-                    <td class="text-end"><a href="{% url 'inventory:stock_edit' item.pk %}">Edit<span class="visually-hidden"> stock at {{ item.workshop.name }}</span></a></td>
+                    <td class="text-end">{% if item.can_edit %}<a href="{% url 'inventory:stock_edit' item.pk %}">Edit<span class="visually-hidden"> stock at {{ item.workshop.name }}</span></a>{% endif %}</td>
                 </tr>
                 {% endfor %}
             </tbody>

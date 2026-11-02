@@ -45,9 +45,10 @@ Emails (verification links, password resets) are printed in the terminal running
 | admin | Admin (also a Django superuser) |
 | mechanic1 | Mechanic at Auckland Central Workshop |
 | mechanic2 | Mechanic at North Shore Workshop |
+| warehouse1 | Staff (mechanic role) at the Parts Warehouse |
 | customer1, customer2 | Customer (each with a demo vehicle) |
 
-The command also creates the two demo workshops.
+The command also creates the two demo workshops and the parts warehouse.
 
 ## Accounts and roles
 
@@ -105,6 +106,17 @@ GarageLog supports several workshops. Add and edit them in the Django admin (`/a
 - **Mechanics can look up any vehicle** in GarageLog by number plate and read its service history (across all workshops). Customer contact details are shown only once that customer has booked at the mechanic's workshop.
 - **Admins** work across every workshop.
 
+### The parts warehouse
+
+One location can be marked as the **parts warehouse** (tick "Parts warehouse" on it in the Django admin; only one location can be). It is the central store that supplies the workshops:
+
+- It holds parts stock but **does not take customer bookings**, so it never appears in the workshop list when booking, and nobody can book there.
+- Staff who work there (a mechanic-role user whose workshop is the warehouse) manage its stock and see a stock-focused dashboard with no bookings.
+- Every workshop's mechanics can see what the warehouse holds, read-only, next to their own stock in the parts search and on a part's page, so they know what can be supplied. Only warehouse staff and admins can change the warehouse's stock.
+- Admins see the warehouse listed separately on their dashboard, with a link to its stock.
+
+If a location was already called a warehouse when you updated (for example "Main Workshop" renamed to "Parts Warehouse"), the update marks it automatically, but only when exactly one location's name contains "warehouse". Otherwise tick the box yourself. Any old bookings or mechanics still attached to it need moving to a real workshop. Admins can reassign a booking by editing it, and a booking that is already cancelled or completed can stay where it is.
+
 ## Parts library
 
 Parts live in one shared catalogue (`Part`), and each workshop keeps its own stock of them (`StockItem`: quantity, reorder level, optional workshop price, bin location). Mechanics and admins use it; customers don't.
@@ -130,10 +142,10 @@ Stocking a workshop is done once, from the terminal:
 python manage.py seed_demo_stock
 ```
 
-This loads the demo catalogue if the parts library is empty, then gives every workshop a starting stock from it (about three quarters of the parts, with sample quantities). It only adds parts a workshop doesn't have yet and never changes existing stock, so it is safe to run again.
+This loads the demo catalogue if the parts library is empty, then gives every location a starting stock from it. Workshops get about three quarters of the parts with sample quantities, and the parts warehouse gets **every** part in large quantities (20 to 150). It only adds parts a location doesn't have yet and never changes existing stock, so it is safe to run again.
 
-- `--workshop "Workshop name"` stocks just that workshop. Repeat it for more than one. Use it after adding a new workshop.
-- `--empty` lists every part at a quantity of 0 instead of sample quantities, ready for real counts to be entered.
+- `--workshop "Workshop name"` stocks just that workshop or the warehouse. Repeat it for more than one. Use it after adding a new workshop.
+- `--empty` lists every part at a quantity of 0 instead of sample or warehouse quantities, ready for real counts to be entered.
 
 After that, each workshop adds, edits and removes its own stock on the Parts pages.
 

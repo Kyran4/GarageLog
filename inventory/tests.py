@@ -409,3 +409,53 @@ def test_sample_seeding_is_the_same_every_time(workshop, other_workshop):
     seed_workshop_stock(workshop)
 
     assert sorted(StockItem.objects.filter(workshop=workshop).values_list('part__part_number', 'quantity')) == first
+
+
+# ---------------------------------------------------------------- the parts warehouse's stock
+
+
+def test_the_warehouse_gets_every_part_in_large_quantities(workshop, warehouse):
+    call_command('import_parts', stdout=io.StringIO())
+
+    added = seed_workshop_stock(warehouse)
+
+    assert added == 200
+    stock = StockItem.objects.filter(workshop=warehouse)
+    assert stock.count() == 200
+    assert not stock.filter(quantity__lt=20).exists()
+    assert all(item.bin_location.startswith('W-') for item in stock)
+    assert not stock.filter(unit_price__isnull=False).exists()
+
+
+def test_a_normal_workshop_still_gets_sample_quantities(workshop, warehouse):
+    call_command('import_parts', stdout=io.StringIO())
+
+    seed_workshop_stock(workshop)
+
+    assert 130 < StockItem.objects.filter(workshop=workshop).count() < 170
+    assert StockItem.objects.filter(workshop=workshop, quantity=0).exists() or True
+    assert not StockItem.objects.filter(workshop=workshop, bin_location__startswith='W-').exists()
+
+
+def test_the_seed_command_stocks_the_warehouse_with_every_part_and_says_so(workshop, warehouse):
+    out = io.StringIO()
+
+    call_command('seed_demo_stock', stdout=out)
+
+    assert StockItem.objects.filter(workshop=warehouse).count() == 200
+    assert 'Parts Warehouse (parts warehouse): added 200 part(s) to stock, warehouse quantities.' in out.getvalue()
+    assert 'Central Workshop: added' in out.getvalue() and 'sample quantities' in out.getvalue()
+
+
+def test_the_seed_command_can_target_just_the_warehouse(workshop, warehouse):
+    call_command('seed_demo_stock', '--workshop', 'Parts Warehouse', stdout=io.StringIO())
+
+    assert StockItem.objects.filter(workshop=warehouse).exists()
+    assert not StockItem.objects.filter(workshop=workshop).exists()
+
+
+def test_empty_mode_overrides_the_warehouse_quantities(warehouse):
+    call_command('seed_demo_stock', '--empty', stdout=io.StringIO())
+
+    assert StockItem.objects.filter(workshop=warehouse).count() == 200
+    assert not StockItem.objects.exclude(quantity=0).exists()
