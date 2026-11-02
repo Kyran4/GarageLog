@@ -1,0 +1,95 @@
+
+<style>
+    .gl-banner {
+        background: linear-gradient(135deg, #111827 0%, #1f2937 55%, #0b4a7d 100%);
+        color: #fff;
+        border-radius: 1rem;
+        padding: 1.5rem 1.75rem;
+        margin-bottom: 1.5rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+        .gl-banner::after {
+            content: "";
+            position: absolute;
+            right: -4rem;
+            top: -5rem;
+            width: 16rem;
+            height: 16rem;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(0, 163, 255, 0.35), rgba(0, 163, 255, 0) 70%);
+            pointer-events: none;
+        }
+
+        .gl-banner > * {
+            position: relative;
+            z-index: 1;
+        }
+
+        .gl-banner .text-body-secondary {
+            color: #d1d5db !important;
+        }
+
+    .gl-card {
+        border: 1px solid var(--bs-border-color);
+        border-radius: 0.9rem;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+        .gl-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 0.6rem 1.2rem rgba(0, 0, 0, 0.08);
+        }
+
+    .gl-accent {
+        border-top: 3px solid #0078d4;
+    }
+
+    .gl-muted {
+        border-top: 3px solid #adb5bd;
+    }
+
+    .gl-accent .display-6 {
+        color: #0078d4;
+        font-weight: 700;
+    }
+
+    .list-group {
+        border-radius: 0.9rem;
+        box-shadow: 0 0.2rem 0.6rem rgba(0, 0, 0, 0.05);
+    }
+
+    .table > thead th {
+        background: #1f2937;
+        color: #fff;
+    }
+
+    .gl-auth {
+        border: 1px solid var(--bs-border-color);
+        border-radius: 1rem;
+        overflow: hidden;
+        box-shadow: 0 0.6rem 1.5rem rgba(0, 0, 0, 0.08);
+    }
+
+    .gl-auth-head {
+        background: linear-gradient(135deg, #111827 0%, #1f2937 55%, #0b4a7d 100%);
+        color: #fff;
+        padding: 1.5rem 1.5rem 1.25rem;
+        border-bottom: 3px solid #00a3ff;
+    }
+
+        .gl-auth-head p {
+            color: #d1d5db;
+        }
+
+    @media (prefers-reduced-motion: reduce) {
+        .gl-card {
+            transition: none;
+        }
+
+            .gl-card:hover {
+                transform: none;
+            }
+    }
+</style>
