@@ -19,6 +19,7 @@
                 <th scope="col">Mechanic</th>
                 {% endif %}
                 <th scope="col">Status</th>
+                <th scope="col"><span class="visually-hidden">Actions</span></th>
             </tr>
         </thead>
         <tbody>
@@ -32,6 +33,9 @@
                 <td>{{ job.mechanic.get_full_name|default:job.mechanic.username }}</td>
                 {% endif %}
                 <td>{{ job.get_status_display }}</td>
+                <td class="text-end">
+                    <a class="btn btn-sm btn-outline-primary" href="{% url 'jobcard_detail' job.pk %}">Open<span class="visually-hidden"> job card #{{ job.id }}</span></a>
+                </td>
             </tr>
             {% endfor %}
         </tbody>

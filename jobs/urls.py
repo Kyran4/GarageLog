@@ -4,4 +4,5 @@ from . import views
 
 urlpatterns = [
     path("", views.JobCardListView.as_view(), name="jobcard_list"),
+    path("<int:pk>/", views.JobCardDetailView.as_view(), name="jobcard_detail"),
 ]
