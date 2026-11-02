@@ -3,15 +3,23 @@
 {% block title %}Sign up | GarageLog{% endblock %}
 
 {% block content %}
+{% include 'includes/theme.html' %}
 <div class="row justify-content-center">
     <div class="col-md-8 col-lg-6">
-        <h1 class="h2 mb-3">Create your account</h1>
-        <p>Already registered? <a href="{% url 'accounts:login' %}">Log in</a>.</p>
-        <form method="post" novalidate>
-            {% csrf_token %}
-            {% include 'includes/form.html' with form=form %}
-            <button type="submit" class="btn btn-primary">Create account</button>
-        </form>
+        <div class="gl-auth">
+            <div class="gl-auth-head">
+                <h1 class="h2 mb-1">Create your account</h1>
+                <p class="mb-0">Book services and keep track of your vehicles.</p>
+            </div>
+            <div class="p-4">
+                <p>Already registered? <a href="{% url 'accounts:login' %}">Log in</a>.</p>
+                <form method="post" novalidate>
+                    {% csrf_token %}
+                    {% include 'includes/form.html' with form=form %}
+                    <button type="submit" class="btn btn-primary">Create account</button>
+                </form>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}

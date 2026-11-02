@@ -27,6 +27,16 @@
             outline: none;
         }
     </style>
+    <script>
+        // Apply the colour theme chosen on the profile page (saved in this browser).
+        (function () {
+            try {
+                var choice = localStorage.getItem('garagelog-theme') || 'light';
+                var dark = choice === 'dark' || (choice === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                document.documentElement.setAttribute('data-bs-theme', dark ? 'dark' : 'light');
+            } catch (e) { }
+        })();
+    </script>
 </head>
 <body>
     <a class="skip-link btn btn-light" href="#main-content">Skip to content</a>
