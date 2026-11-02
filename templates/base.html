@@ -64,11 +64,6 @@
                     <li class="nav-item">
                         <a class="nav-link{% if 'booking' in url_name %} active{% endif %}" {% if 'booking' in url_name %}aria-current="page" {% endif %} href="{% url 'booking_list' %}">Bookings</a>
                     </li>
-                    {% if user.is_admin_role or user.is_mechanic and not user.workshop.is_parts_warehouse %}
-                    <li class="nav-item">
-                        <a class="nav-link{% if 'jobcard' in url_name %} active{% endif %}" {% if 'jobcard' in url_name %}aria-current="page" {% endif %} href="{% url 'jobcard_list' %}">Job cards</a>
-                    </li>
-                    {% endif %}
                     <li class="nav-item">
                         <a class="nav-link{% if url_name == 'profile' %} active{% endif %}" {% if url_name == 'profile' %}aria-current="page" {% endif %} href="{% url 'accounts:profile' %}">Profile</a>
                     </li>
