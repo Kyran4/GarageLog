@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }} - GarageLog{% endblock %}
+
+{% block content %}
+<h1 class="h3 mb-3">{{ page_title }}</h1>
+
+{% if job_cards %}
+<div class="table-responsive">
+    <table class="table table-striped align-middle">
+        <caption class="visually-hidden">{{ page_title }}</caption>
+        <thead>
+            <tr>
+                <th scope="col">Job</th>
+                <th scope="col">Service</th>
+                <th scope="col">Vehicle</th>
+                <th scope="col">Date</th>
+                {% if user.is_admin_role %}
+                <th scope="col">Mechanic</th>
+                {% endif %}
+                <th scope="col">Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for job in job_cards %}
+            <tr>
+                <th scope="row">#{{ job.id }}</th>
+                <td>{{ job.booking.service_type }}</td>
+                <td>{{ job.booking.vehicle|default:"-" }}</td>
+                <td>{{ job.booking.booking_date|date:"j M Y" }}</td>
+                {% if user.is_admin_role %}
+                <td>{{ job.mechanic.get_full_name|default:job.mechanic.username }}</td>
+                {% endif %}
+                <td>{{ job.get_status_display }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<p>There are no job cards to show yet.</p>
+{% endif %}
+{% endblock %}
