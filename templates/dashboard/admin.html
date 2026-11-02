@@ -3,16 +3,19 @@
 {% block title %}Admin dashboard | GarageLog{% endblock %}
 
 {% block content %}
-<h1 class="h2">Admin dashboard</h1>
-<p class="text-body-secondary">Welcome, {{ user.first_name|default:user.username }}</p>
+{% include 'includes/theme.html' %}
+<div class="gl-banner">
+    <h1 class="h2">Admin dashboard</h1>
+    <p class="text-body-secondary mb-0">Welcome, {{ user.first_name|default:user.username }}</p>
+</div>
 
 <section aria-labelledby="summary-heading" class="mb-4">
     <h2 class="h5" id="summary-heading">Users at a glance</h2>
     <div class="row g-3">
-        <div class="col-6 col-md-3"><div class="card"><div class="card-body"><p class="display-6 mb-0">{{ total_users }}</p><p class="mb-0">Total users</p></div></div></div>
-        <div class="col-6 col-md-3"><div class="card"><div class="card-body"><p class="display-6 mb-0">{{ customer_count }}</p><p class="mb-0">Customers</p></div></div></div>
-        <div class="col-6 col-md-3"><div class="card"><div class="card-body"><p class="display-6 mb-0">{{ mechanic_count }}</p><p class="mb-0">Mechanics</p></div></div></div>
-        <div class="col-6 col-md-3"><div class="card"><div class="card-body"><p class="display-6 mb-0">{{ admin_count }}</p><p class="mb-0">Admins</p></div></div></div>
+        <div class="col-6 col-md-3"><div class="card gl-card gl-accent"><div class="card-body"><p class="display-6 mb-0">{{ total_users }}</p><p class="mb-0">Total users</p></div></div></div>
+        <div class="col-6 col-md-3"><div class="card gl-card gl-accent"><div class="card-body"><p class="display-6 mb-0">{{ customer_count }}</p><p class="mb-0">Customers</p></div></div></div>
+        <div class="col-6 col-md-3"><div class="card gl-card gl-accent"><div class="card-body"><p class="display-6 mb-0">{{ mechanic_count }}</p><p class="mb-0">Mechanics</p></div></div></div>
+        <div class="col-6 col-md-3"><div class="card gl-card gl-accent"><div class="card-body"><p class="display-6 mb-0">{{ admin_count }}</p><p class="mb-0">Admins</p></div></div></div>
     </div>
 </section>
 
