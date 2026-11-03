@@ -134,14 +134,34 @@ def read_rows(path):
 
 def import_parts(parsed):
     """Create or update parts and replace their fitments. Returns (created, updated)."""
-    created = updated = 0
+    if not parsed:
+        return 0, 0
+
+    part_numbers = [item['part_number'] for item in parsed]
+    update_fields = ['name', 'brand', 'category', 'default_price', 'universal', 'description']
     with transaction.atomic():
-        for item in parsed:
-            part, was_created = Part.objects.update_or_create(
-                part_number=item['part_number'], defaults=item['fields'],
-            )
-            created += was_created
-            updated += not was_created
-            part.fitments.all().delete()
-            PartFitment.objects.bulk_create([PartFitment(part=part, **fitment) for fitment in item['fitments']])
+        existing = Part.objects.in_bulk(part_numbers, field_name='part_number')
+        parts = [
+            Part(part_number=item['part_number'], **item['fields'])
+            for item in parsed
+        ]
+        Part.objects.bulk_create(
+            parts,
+            batch_size=500,
+            update_conflicts=True,
+            unique_fields=['part_number'],
+            update_fields=update_fields,
+        )
+        parts_by_number = Part.objects.in_bulk(part_numbers, field_name='part_number')
+
+        PartFitment.objects.filter(part_id__in=[part.pk for part in parts_by_number.values()]).delete()
+        fitments = [
+            PartFitment(part_id=parts_by_number[item['part_number']].pk, **fitment)
+            for item in parsed
+            for fitment in item['fitments']
+        ]
+        PartFitment.objects.bulk_create(fitments, batch_size=500)
+
+    created = sum(item['part_number'] not in existing for item in parsed)
+    updated = len(parsed) - created
     return created, updated
