@@ -189,6 +189,30 @@ def test_importing_twice_updates_instead_of_duplicating(tmp_path):
     assert [(f.make, f.model) for f in part.fitments.all()] == [('Mazda', 'Mazda3')]  # old fitment replaced
 
 
+def test_import_updates_parts_in_bulk_without_changing_active_state(tmp_path):
+    part = Part.objects.create(
+        part_number='T-1',
+        name='Old part',
+        category=Part.Category.FILTERS,
+        default_price=Decimal('12.90'),
+        is_active=False,
+    )
+    path = write_csv(tmp_path, 'T-1,New part,,FILTERS,15.90,no,Toyota|Corolla')
+
+    call_command('import_parts', str(path), stdout=io.StringIO())
+
+    part.refresh_from_db()
+    assert part.name == 'New part'
+    assert part.default_price == Decimal('15.90')
+    assert not part.is_active
+    assert [(fitment.make, fitment.model) for fitment in part.fitments.all()] == [('Toyota', 'Corolla')]
+
+
+def test_importing_demo_catalogue_uses_a_bounded_number_of_queries(django_assert_num_queries):
+    with django_assert_num_queries(7):
+        call_command('import_parts', stdout=io.StringIO())
+
+
 @pytest.mark.parametrize('row, message', [
     ('T-1,Oil filter,,SPARKLES,12.90,no,Toyota|Corolla', 'category'),
     ('T-1,Oil filter,,FILTERS,cheap,no,Toyota|Corolla', 'default_price'),
