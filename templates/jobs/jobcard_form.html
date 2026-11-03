@@ -23,6 +23,9 @@
         <dt class="col-sm-3">Date and time</dt>
         <dd class="col-sm-9">{{ job_card.booking.booking_date|date:"j M Y" }}, {{ job_card.booking.booking_time|time:"g:i a" }}</dd>
 
+        <dt class="col-sm-3">Service status</dt>
+        <dd class="col-sm-9">{% include 'includes/booking_status.html' with status=job_card.booking.status label=job_card.booking.get_status_display %}</dd>
+
         <dt class="col-sm-3">Mechanic</dt>
         <dd class="col-sm-9">{{ job_card.mechanic.get_full_name|default:job_card.mechanic.username }}</dd>
 
@@ -31,6 +34,81 @@
         <dd class="col-sm-9">{{ job_card.booking.notes|linebreaksbr }}</dd>
         {% endif %}
     </dl>
+</section>
+
+<section class="mb-4" aria-labelledby="parts-heading">
+    <h2 class="h5" id="parts-heading">Parts required</h2>
+    {% if job_card.parts.all %}
+    <div class="table-responsive">
+        <table class="table table-striped align-middle">
+            <thead><tr><th>Part</th><th>Supply status</th><th>Quantity</th><th>Unit cost (internal)</th><th>Customer price</th><th>Line total</th><th></th></tr></thead>
+            <tbody>
+                {% for part in job_card.parts.all %}
+                <tr>
+                    <td>{{ part.name }}</td>
+                    <td>{{ part.get_supply_status_display }}</td>
+                    <td>{{ part.quantity }}</td>
+                    <td>{% if part.unit_cost != None %}${{ part.unit_cost }}{% else %}-{% endif %}</td>
+                    <td>${{ part.unit_price }}</td>
+                    <td>${{ part.line_total }}{% if part.freight_charge %}<br><small>Freight: ${{ part.freight_charge }} ({{ part.get_source_display }})</small>{% endif %}</td>
+                    <td class="text-end">
+                        {% if part.supply_status == "BACKORDERED" or part.supply_status == "ON_ORDER" %}
+                        <a class="btn btn-sm btn-outline-secondary" href="{% url 'supplier_order_list' %}">Warehouse orders</a>
+                        {% elif part.supply_status == "READY" and not part.supplier_order %}
+                        <form method="post" action="{% url 'jobcard_part_remove' job_card.pk part.pk %}">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p>No parts assigned yet.</p>
+    {% endif %}
+    <form method="post" action="{% url 'jobcard_part_add' job_card.pk %}" class="row g-3">
+        {% csrf_token %}
+        <div class="col-md-6" id="part-search-container">
+            <label for="part-search" class="form-label">Search catalogue parts</label>
+            <input id="part-search" type="search" class="form-control" autocomplete="off" aria-controls="part-search-results" aria-describedby="part-search-help">
+            <div id="part-search-help" class="form-text">
+                {% if job_card.booking.vehicle %}
+                Results match {{ job_card.booking.vehicle.year }} {{ job_card.booking.vehicle.make }} {{ job_card.booking.vehicle.model }} and universal parts.
+                {% else %}
+                This booking has no vehicle, so all catalogue parts are shown.
+                {% endif %}
+                Search by part name, number, or brand.
+            </div>
+            <div class="d-flex flex-wrap gap-2 mt-2" role="group" aria-label="Part search scope">
+                <button id="matching-parts-button" type="button" class="btn btn-sm btn-primary" aria-pressed="true">Vehicle matches + universal</button>
+                <button id="all-parts-button" type="button" class="btn btn-sm btn-outline-secondary" aria-pressed="false">Entire catalogue</button>
+                <button id="manual-part-button" type="button" class="btn btn-sm btn-outline-secondary" aria-pressed="false">Enter a manual part</button>
+            </div>
+            <div id="part-search-status" class="visually-hidden" aria-live="polite"></div>
+            <div id="part-search-results" class="list-group mt-1" role="listbox"></div>
+            <button id="load-more-parts" type="button" class="btn btn-sm btn-outline-secondary mt-2" hidden>Load more parts</button>
+            <div id="selected-part" class="form-text" aria-live="polite"></div>
+            <div id="part-stock-status" class="form-text" aria-live="polite"></div>
+        </div>
+        {% for field in part_form %}
+        {% if field.name != "part" and field.name != "source" %}
+        <div class="col-md-6">
+            <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+            {% for error in field.errors %}<div class="text-danger">{{ error }}</div>{% endfor %}
+        </div>
+        {% endif %}
+        {% endfor %}
+        {{ part_form.source }}
+        {{ part_form.part }}
+        {% for error in part_form.part.errors %}<div class="col-12 text-danger">{{ error }}</div>{% endfor %}
+        <div class="col-12"><button id="add-part-button" type="submit" class="btn btn-outline-primary">Add part</button></div>
+    </form>
+    <a class="btn btn-primary mt-3" href="{% url 'jobcard_invoice' job_card.pk %}">View invoice</a>
 </section>
 
 <section aria-labelledby="update-heading">
@@ -57,4 +135,202 @@
         <a href="{% url 'booking_detail' job_card.booking.pk %}" class="btn btn-outline-secondary">Back to booking</a>
     </form>
 </section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    (function () {
+        const search = document.getElementById("part-search");
+        const results = document.getElementById("part-search-results");
+        const selected = document.getElementById("selected-part");
+        const hiddenPart = document.getElementById("id_part");
+        const source = document.getElementById("id_source");
+        const freight = document.getElementById("id_freight_charge");
+        const quantity = document.getElementById("id_quantity");
+        const status = document.getElementById("part-search-status");
+        const stockStatus = document.getElementById("part-stock-status");
+        const addButton = document.getElementById("add-part-button");
+        const matchingButton = document.getElementById("matching-parts-button");
+        const allButton = document.getElementById("all-parts-button");
+        const loadMoreButton = document.getElementById("load-more-parts");
+        const manualButton = document.getElementById("manual-part-button");
+        const nameField = document.getElementById("id_name");
+        let showAll = false;
+        let currentPage = 0;
+        let currentRequest = 0;
+        let selectedResult = null;
+        let timer;
+
+        function clearResults() {
+            results.replaceChildren();
+            currentPage = 0;
+            loadMoreButton.hidden = true;
+        }
+
+        function searchParts(reset) {
+            if (reset) {
+                clearResults();
+            }
+            const query = search.value.trim();
+            if (!query) {
+                status.textContent = "Type to search within the selected part scope.";
+                return;
+            }
+            const requestId = ++currentRequest;
+            const params = new URLSearchParams({page: String(currentPage + 1)});
+            if (showAll) {
+                params.set("all", "1");
+            }
+            if (query) {
+                params.set("q", query);
+            }
+            status.textContent = "Loading parts…";
+            fetch("{% url 'jobcard_part_search' job_card.pk %}?" + params.toString(), {
+                headers: {"X-Requested-With": "XMLHttpRequest"}
+            })
+                .then(function (response) {
+                    if (!response.ok) {
+                        throw new Error("Part search failed.");
+                    }
+                    return response.json();
+                })
+                .then(function (data) {
+                    if (requestId !== currentRequest) {
+                        return;
+                    }
+                    data.results.forEach(function (part) {
+                        const button = document.createElement("button");
+                        button.type = "button";
+                        button.className = "list-group-item list-group-item-action";
+                        button.role = "option";
+                        button.textContent = part.label
+                            + (part.universal ? " — universal" : "")
+                            + " — " + part.workshop_name + ": " + part.workshop_stock
+                            + ", " + part.warehouse_name + ": " + part.warehouse_stock;
+                        button.addEventListener("click", function () {
+                            hiddenPart.value = part.id;
+                            search.value = part.label;
+                            selectedResult = part;
+                            selected.textContent = "Selected: " + part.label
+                                + " (" + part.workshop_name + ": " + part.workshop_stock
+                                + ", " + part.warehouse_name + ": " + part.warehouse_stock + ")";
+                            clearResults();
+                            status.textContent = selected.textContent;
+                            updateAvailability();
+                        });
+                        results.appendChild(button);
+                    });
+                    currentPage = data.page;
+                    loadMoreButton.hidden = !data.has_more;
+                    status.textContent = data.total
+                        ? data.total + " catalogue part" + (data.total === 1 ? "" : "s")
+                            + (data.filtered_by_vehicle ? " matching this vehicle or universal" : "")
+                            + " available. Showing " + Math.min(currentPage * 50, data.total) + "."
+                        : "No matching catalogue parts found.";
+                })
+                .catch(function (error) {
+                    if (requestId === currentRequest) {
+                        status.textContent = error.message;
+                    }
+                });
+        }
+
+        function updateAvailability() {
+            addButton.disabled = false;
+            if (!selectedResult || source.value === "MANUAL") {
+                stockStatus.textContent = source.value === "MANUAL"
+                    ? "This part will be added manually and will not use catalogue stock."
+                    : "";
+                return;
+            }
+            const requested = Math.max(1, Number(quantity.value || 1));
+            const workshopAvailable = selectedResult.workshop_stock;
+            const warehouseAvailable = selectedResult.warehouse_stock;
+            const nextSource = workshopAvailable >= requested ? "WORKSHOP" : "WAREHOUSE";
+            if (source.value !== nextSource) {
+                source.value = nextSource;
+                freight.value = nextSource === "WAREHOUSE" ? "12.99" : "0.00";
+            }
+            if (nextSource === "WORKSHOP") {
+                stockStatus.textContent = "In stock at " + selectedResult.workshop_name
+                    + " (" + workshopAvailable + " available); this part will be assigned from workshop stock.";
+            } else if (warehouseAvailable >= requested) {
+                stockStatus.textContent = "Not enough at " + selectedResult.workshop_name
+                    + "; " + warehouseAvailable + " available at " + selectedResult.warehouse_name
+                    + ". This part will be requested from the warehouse.";
+            } else {
+                stockStatus.textContent = "Not enough stock at the workshop or warehouse. This part will be backordered through the warehouse.";
+            }
+        }
+
+        search.addEventListener("input", function () {
+            hiddenPart.value = "";
+            selectedResult = null;
+            source.value = "WORKSHOP";
+            selected.textContent = "";
+            stockStatus.textContent = "";
+            addButton.disabled = false;
+            clearTimeout(timer);
+            if (search.value.trim().length < 2) {
+                currentRequest++;
+                status.textContent = "Type at least two characters to search.";
+                return;
+            }
+            timer = setTimeout(function () { searchParts(true); }, 200);
+        });
+
+        matchingButton.addEventListener("click", function () {
+            showAll = false;
+            matchingButton.className = "btn btn-sm btn-primary";
+            matchingButton.setAttribute("aria-pressed", "true");
+            allButton.className = "btn btn-sm btn-outline-secondary";
+            allButton.setAttribute("aria-pressed", "false");
+            if (search.value.trim().length >= 2) {
+                searchParts(true);
+            } else {
+                clearResults();
+                status.textContent = "Type to search vehicle matches and universal parts.";
+            }
+        });
+        allButton.addEventListener("click", function () {
+            showAll = true;
+            allButton.className = "btn btn-sm btn-primary";
+            allButton.setAttribute("aria-pressed", "true");
+            matchingButton.className = "btn btn-sm btn-outline-primary";
+            matchingButton.setAttribute("aria-pressed", "false");
+            if (search.value.trim().length >= 2) {
+                searchParts(true);
+            } else {
+                clearResults();
+                status.textContent = "Type to search the entire catalogue.";
+            }
+        });
+        loadMoreButton.addEventListener("click", function () {
+            searchParts(false);
+        });
+
+        manualButton.addEventListener("click", function () {
+            const manual = source.value !== "MANUAL";
+            source.value = manual ? "MANUAL" : "WORKSHOP";
+            search.disabled = manual;
+            nameField.required = manual;
+            manualButton.textContent = manual ? "Search catalogue parts" : "Enter a manual part";
+            manualButton.setAttribute("aria-pressed", String(manual));
+            if (manual) {
+                hiddenPart.value = "";
+                selectedResult = null;
+                search.value = "";
+                selected.textContent = "Enter the part description, acquisition cost, and customer price below.";
+                stockStatus.textContent = "This part will not be linked to catalogue stock.";
+                clearResults();
+            } else {
+                selected.textContent = "";
+                stockStatus.textContent = "";
+                freight.value = "0.00";
+            }
+        });
+        quantity.addEventListener("input", updateAvailability);
+        status.textContent = "Type to search vehicle matches and universal parts.";
+    }());
+</script>
 {% endblock %}

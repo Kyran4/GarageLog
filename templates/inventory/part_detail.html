@@ -52,7 +52,14 @@
                         {% if item.is_out %}<span class="badge text-bg-danger">Out of stock</span>{% elif item.is_low %}<span class="badge text-bg-warning">Low</span>{% endif %}</td>
                     <td>${{ item.price }}</td>
                     <td>{{ item.bin_location|default:"-" }}</td>
-                    <td class="text-end">{% if item.can_edit %}<a href="{% url 'inventory:stock_edit' item.pk %}">Edit<span class="visually-hidden"> stock at {{ item.workshop.name }}</span></a>{% endif %}</td>
+                    <td class="text-end text-nowrap">
+                        {% if item.can_edit %}
+                        {% if item.workshop.is_parts_warehouse and user.is_mechanic and user.workshop_id == item.workshop_id %}
+                        <a class="btn btn-sm btn-primary" href="{% url 'supplier_stock_order_create' %}?part={{ part.pk }}&amp;quantity=1">Order<span class="visually-hidden"> {{ part.part_number }} from supplier</span></a>
+                        {% endif %}
+                        <a class="btn btn-sm btn-outline-primary" href="{% url 'inventory:stock_edit' item.pk %}">Edit<span class="visually-hidden"> stock at {{ item.workshop.name }}</span></a>
+                        {% endif %}
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>

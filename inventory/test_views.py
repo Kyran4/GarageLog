@@ -3,8 +3,10 @@ import io
 import pytest
 from django.core.management import call_command
 from django.urls import reverse
+from django.utils import timezone
 
 from accounts.models import User
+from jobs.models import SupplierOrder
 
 from .models import Part, StockItem
 
@@ -600,6 +602,10 @@ def test_warehouse_staff_manage_the_warehouses_stock(client, warehouse_staff, wa
     assert list(listing.context['items']) == [held]
     assert 'Parts warehouse' in listing.content.decode()
     assert "doesn't take customer bookings" in listing.content.decode().replace('&#x27;', "'")
+    assert (
+        f'{reverse("supplier_stock_order_create")}?part={held.part_id}&amp;quantity=1'
+        in listing.content.decode()
+    )
 
     response = client.post(
         reverse('inventory:stock_edit', kwargs={'pk': held.pk}), {'quantity': 80, 'reorder_level': 20},
@@ -608,6 +614,46 @@ def test_warehouse_staff_manage_the_warehouses_stock(client, warehouse_staff, wa
     assert response.status_code == 302
     held.refresh_from_db()
     assert held.quantity == 80
+
+
+def test_warehouse_staff_can_order_part_from_stock_detail(client, warehouse_staff, warehouse, corolla_parts, make_stock):
+    held = make_stock(warehouse, corolla_parts['filter_old'], quantity=100)
+    client.force_login(warehouse_staff)
+
+    response = client.get(
+        reverse('inventory:detail', kwargs={'pk': held.part_id})
+    )
+
+    assert response.status_code == 200
+    assert (
+        f'{reverse("supplier_stock_order_create")}?part={held.part_id}&amp;quantity=1'
+        in response.content.decode()
+    )
+
+
+def test_warehouse_stock_list_shows_outstanding_supplier_order_quantity(
+    client, warehouse_staff, warehouse, corolla_parts, make_stock
+):
+    part = corolla_parts['filter_old']
+    make_stock(warehouse, part, quantity=0)
+    order = SupplierOrder.objects.create(
+        part=part,
+        quantity=6,
+        supplier='Test supplier',
+        unit_cost='12.50',
+        ordered_by=warehouse_staff,
+    )
+    client.force_login(warehouse_staff)
+
+    response = client.get(reverse('inventory:stock'))
+
+    assert response.status_code == 200
+    assert 'On order: 6' in response.content.decode()
+
+    order.received_at = timezone.now()
+    order.save(update_fields=['received_at'])
+    response = client.get(reverse('inventory:stock'))
+    assert 'On order: 6' not in response.content.decode()
 
 
 def test_the_admins_stock_picker_labels_the_warehouse(client, admin_user, workshop, warehouse):

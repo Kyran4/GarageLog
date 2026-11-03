@@ -106,6 +106,11 @@ class StockItem(models.Model):
         validators=[MinValueValidator(Decimal('0'))],
         help_text="Leave blank to use the part's guide price.",
     )
+    unit_cost = models.DecimalField(
+        'last supplier unit cost', max_digits=8, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(Decimal('0'))],
+        help_text='Internal supplier cost from the most recent warehouse order.',
+    )
     bin_location = models.CharField(max_length=30, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}Order part from supplier - GarageLog{% endblock %}
+
+{% block content %}
+<nav aria-label="Breadcrumb"><a href="{% url 'supplier_order_list' %}">&larr; Back to warehouse orders</a></nav>
+<h1 class="h2 my-3">{% if job_part %}Order backorder from supplier{% else %}Order stock from supplier{% endif %}</h1>
+{% if job_part %}
+<dl class="row">
+    <dt class="col-sm-3">Part</dt>
+    <dd class="col-sm-9">{% if job_part.part %}{{ job_part.part.part_number }} — {% endif %}{{ job_part.name }}</dd>
+    <dt class="col-sm-3">Quantity</dt>
+    <dd class="col-sm-9">{{ job_part.quantity }}</dd>
+    <dt class="col-sm-3">Job</dt>
+    <dd class="col-sm-9"><a href="{% url 'jobcard_detail' job_part.job_card_id %}">Job card #{{ job_part.job_card_id }}</a></dd>
+</dl>
+{% else %}
+<p>Choose a catalogue part and quantity to add to warehouse stock when the supplier order arrives.</p>
+{% endif %}
+<form method="post" novalidate>
+    {% csrf_token %}
+    {% if not job_part %}
+    <div class="mb-3">
+        <label for="part-search" class="form-label">Search catalogue parts</label>
+        <input type="search" id="part-search" class="form-control" autocomplete="off"
+               placeholder="Type a part name or number" list="part-options"
+               aria-autocomplete="list" aria-controls="part-options">
+        <datalist id="part-options">
+            {% for part in form.part.field.queryset %}
+            <option value="{{ part.part_number }} - {{ part.name }}" data-part-id="{{ part.pk }}"></option>
+            {% endfor %}
+        </datalist>
+        <div class="form-text">Choose a suggested part directly from the search box.</div>
+        <div class="invalid-feedback d-block" id="part-search-error"{% if not form.part.errors %} hidden{% endif %}>
+            {% for error in form.part.errors %}{{ error }}{% endfor %}
+        </div>
+        {{ form.part }}
+    </div>
+    {% endif %}
+    {% for field in form %}
+    {% if field.name != 'part' or job_part %}
+    <div class="mb-3">
+        <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+        {{ field }}
+        {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+        {% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+    </div>
+    {% endif %}
+    {% endfor %}
+    {% if form.non_field_errors %}<div class="alert alert-danger" role="alert">{{ form.non_field_errors }}</div>{% endif %}
+    <button type="submit" class="btn btn-primary">Record supplier order</button>
+    <a class="btn btn-outline-secondary" href="{% url 'supplier_order_list' %}">Cancel</a>
+</form>
+{% endblock %}
+
+{% block scripts %}
+{% if not job_part %}
+<script>
+    (function () {
+        var search = document.getElementById('part-search');
+        var select = document.getElementById('{{ form.part.id_for_label }}');
+        var options = document.getElementById('part-options');
+        var error = document.getElementById('part-search-error');
+        if (!search || !select) return;
+        function syncSelection() {
+            var match = Array.prototype.find.call(options.options, function (option) {
+                return option.value === search.value;
+            });
+            select.value = match ? match.getAttribute('data-part-id') : '';
+            if (error && !match) error.hidden = search.value.trim() === '';
+        }
+        search.addEventListener('input', syncSelection);
+        search.addEventListener('change', syncSelection);
+        Array.prototype.forEach.call(options.options, function (option) {
+            if (option.getAttribute('data-part-id') === select.value) {
+                search.value = option.value;
+            }
+        });
+    })();
+</script>
+{% endif %}
+{% endblock %}

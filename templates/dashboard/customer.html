@@ -3,7 +3,6 @@
 {% block title %}Customer dashboard | GarageLog{% endblock %}
 
 {% block content %}
-{% include 'includes/theme.html' %}
 <div class="gl-banner">
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-1">
         <h1 class="h2 mb-0">Welcome, {{ user.first_name|default:user.username }}</h1>

@@ -114,6 +114,49 @@ def test_admin_sees_all_bookings_and_can_filter_by_status(client, admin_user, cu
     assert everything.context['page_title'] == 'All bookings'
 
 
+def test_booking_list_can_be_sorted_and_switches_to_month_calendar(
+    client, admin_user, customer, vehicle, make_booking
+):
+    first_date = datetime.date(2026, 11, 5)
+    later_date = datetime.date(2026, 11, 12)
+    first = make_booking(customer, vehicle, date=first_date, service_type='Oil Change')
+    later = make_booking(
+        customer,
+        vehicle,
+        date=later_date,
+        time=datetime.time(11, 0),
+        service_type='Brake Repair',
+    )
+    outside_month = make_booking(
+        customer,
+        vehicle,
+        date=datetime.date(2026, 12, 3),
+        service_type='Tyre Change',
+    )
+    client.force_login(admin_user)
+
+    ascending = client.get(reverse('booking_list') + '?sort=date_asc')
+    descending = client.get(reverse('booking_list') + '?sort=date_desc')
+    calendar_view = client.get(
+        reverse('booking_list') + '?view=calendar&month=2026-11'
+    )
+
+    assert list(ascending.context['bookings']) == [first, later, outside_month]
+    assert list(descending.context['bookings']) == [outside_month, later, first]
+    assert calendar_view.context['view_mode'] == 'calendar'
+    assert list(calendar_view.context['bookings']) == [first, later]
+    assert calendar_view.context['month_label'] == 'November 2026'
+    assert any(
+        booking == first
+        for week in calendar_view.context['calendar_weeks']
+        for day in week
+        for booking in day['bookings']
+    )
+    assert b'Calendar' in calendar_view.content
+    assert b'Brake Repair' in calendar_view.content
+    assert b'Tyre Change' not in calendar_view.content
+
+
 # ---------------------------------------------------------------- customer creates a booking
 
 
@@ -696,6 +739,28 @@ def test_warehouse_staff_cannot_make_bookings(client, warehouse_staff, customer,
 
     assert response.redirect_chain[0][0] == reverse('dashboard')  # then on to the role's own dashboard
     assert "parts warehouse and doesn't take bookings" in response.content.decode().replace('&#x27;', "'")
+
+
+def test_warehouse_staff_navigation_hides_vehicles_and_bookings_but_keeps_stock_tools(
+    client, warehouse_staff
+):
+    client.force_login(warehouse_staff)
+
+    body = client.get(reverse('booking_list')).content.decode()
+
+    assert f'href="{reverse("vehicles:list")}"' not in body
+    assert f'href="{reverse("booking_list")}"' not in body
+    assert f'href="{reverse("inventory:search")}"' in body
+    assert 'Warehouse orders' in body
+
+
+def test_workshop_mechanic_navigation_keeps_vehicles_and_bookings(client, mechanic):
+    client.force_login(mechanic)
+
+    body = client.get(reverse('booking_list')).content.decode()
+
+    assert f'href="{reverse("vehicles:list")}"' in body
+    assert f'href="{reverse("booking_list")}"' in body
 
 
 def test_an_old_booking_at_a_workshop_that_became_the_warehouse_can_still_be_closed_off(

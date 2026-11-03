@@ -1,5 +1,5 @@
 from django.contrib import messages
-from django.db.models import F, Q
+from django.db.models import F, Q, Sum
 from django.http import QueryDict
 from django.shortcuts import redirect
 from django.urls import reverse
@@ -165,7 +165,15 @@ class StockListView(StaffOnlyMixin, WorkshopScopeMixin, ListView):
         workshop = self.get_workshop()
         if workshop is None:
             return StockItem.objects.none()
-        items = StockItem.objects.filter(workshop=workshop).select_related('part')
+        items = StockItem.objects.filter(workshop=workshop).select_related('part').annotate(
+            on_order_quantity=Sum(
+                'part__supplier_orders__quantity',
+                filter=Q(
+                    part__supplier_orders__received_at__isnull=True,
+                    part__supplier_orders__job_part__isnull=True,
+                ),
+            )
+        ).order_by('part__category', 'part__name')
         query = self.request.GET.get('q', '').strip()
         if query:
             items = items.filter(Q(part__name__icontains=query) | Q(part__part_number__icontains=query))

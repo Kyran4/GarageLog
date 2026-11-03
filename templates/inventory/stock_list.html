@@ -7,6 +7,7 @@
     <h1 class="h2 mb-0">{% if workshop %}{{ workshop.name }} stock{% else %}Workshop stock{% endif %}{% if workshop.is_parts_warehouse %} <span class="badge text-bg-secondary fs-6 align-middle">Parts warehouse</span>{% endif %}</h1>
     <div class="d-flex flex-wrap gap-2">
         <a class="btn btn-outline-primary" href="{% url 'inventory:search' %}">Find parts</a>
+        {% if workshop.is_parts_warehouse %}<a class="btn btn-primary" href="{% url 'supplier_stock_order_create' %}">Order stock from supplier</a>{% endif %}
         {% if workshop %}<a class="btn btn-primary" href="{% url 'inventory:stock_add' %}{{ workshop_query }}">Add a part to stock</a>{% endif %}
     </div>
 </div>
@@ -76,11 +77,13 @@
                 <td>{{ item.part.name }}</td>
                 <td>{{ item.part.get_category_display }}</td>
                 <td>{{ item.quantity }}
-                    {% if item.is_out %}<span class="badge text-bg-danger">Out of stock</span>{% elif item.is_low %}<span class="badge text-bg-warning">Low</span>{% endif %}</td>
+                    {% if item.is_out %}<span class="badge text-bg-danger">Out of stock</span>{% elif item.is_low %}<span class="badge text-bg-warning">Low</span>{% endif %}
+                    {% if item.on_order_quantity %}<span class="badge text-bg-info">On order: {{ item.on_order_quantity }}</span>{% endif %}</td>
                 <td>{{ item.reorder_level }}</td>
                 <td>${{ item.price }}{% if item.unit_price is not None %} <span class="badge text-bg-info">Workshop price</span>{% endif %}</td>
                 <td>{{ item.bin_location|default:"-" }}</td>
                 <td class="text-end text-nowrap">
+                    {% if workshop.is_parts_warehouse %}<a class="btn btn-sm btn-primary" href="{% url 'supplier_stock_order_create' %}?part={{ item.part_id }}&amp;quantity=1">Order<span class="visually-hidden"> {{ item.part.part_number }} from supplier</span></a>{% endif %}
                     <a class="btn btn-sm btn-outline-primary" href="{% url 'inventory:stock_edit' item.pk %}">Edit<span class="visually-hidden"> {{ item.part.part_number }}</span></a>
                     <a class="btn btn-sm btn-outline-danger" href="{% url 'inventory:stock_delete' item.pk %}">Remove<span class="visually-hidden"> {{ item.part.part_number }}</span></a>
                 </td>

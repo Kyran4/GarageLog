@@ -1,9 +1,14 @@
+import calendar
+import datetime
+
+from django import forms
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
 from django.db import IntegrityError, transaction
 from django.shortcuts import redirect
 from django.urls import reverse, reverse_lazy
+from django.utils import timezone
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
 from accounts.mixins import AdminRequiredMixin, RoleRequiredMixin
@@ -39,15 +44,39 @@ class BookingListView(BookingQuerysetMixin, ListView):
     context_object_name = "bookings"
     paginate_by = 20
 
+    SORT_OPTIONS = {
+        "date_desc": ("Newest date", ("-booking_date", "-booking_time")),
+        "date_asc": ("Oldest date", ("booking_date", "booking_time")),
+        "time_asc": ("Time (earliest first)", ("booking_time", "booking_date")),
+        "time_desc": ("Time (latest first)", ("-booking_time", "booking_date")),
+        "service": ("Service (A-Z)", ("service_type", "-booking_date", "-booking_time")),
+        "status": ("Status", ("status", "-booking_date", "-booking_time")),
+    }
+
     def _is_staff(self):
         user = self.request.user
         return user.is_admin_role or user.is_mechanic
 
+    def get_selected_month(self):
+        try:
+            month = datetime.datetime.strptime(
+                self.request.GET.get("month", ""), "%Y-%m"
+            ).date().replace(day=1)
+            if not 1900 <= month.year <= 9998:
+                raise ValueError
+            return month
+        except ValueError:
+            return timezone.localdate().replace(day=1)
+
+    def get_view_mode(self):
+        return "calendar" if self.request.GET.get("view") == "calendar" else "list"
+
+    def get_paginate_by(self, queryset):
+        return None if self.get_view_mode() == "calendar" else self.paginate_by
+
 
     def get_queryset(self):
-        bookings = super().get_queryset().order_by(
-            "-booking_date", "-booking_time"
-        )
+        bookings = super().get_queryset()
 
         user = self.request.user
 
@@ -60,6 +89,22 @@ class BookingListView(BookingQuerysetMixin, ListView):
             status = self.request.GET.get("status", "")
             if status in dict(Booking.STATUS_CHOICES):
                 bookings = bookings.filter(status=status)
+
+        if self.get_view_mode() == "calendar":
+            month = self.get_selected_month()
+            next_month = (
+                month.replace(day=28) + datetime.timedelta(days=4)
+            ).replace(day=1)
+            bookings = bookings.filter(
+                booking_date__gte=month,
+                booking_date__lt=next_month,
+            ).order_by("booking_date", "booking_time")
+        else:
+            selected_sort = self.request.GET.get("sort", "date_desc")
+            ordering = self.SORT_OPTIONS.get(
+                selected_sort, self.SORT_OPTIONS["date_desc"]
+            )[1]
+            bookings = bookings.order_by(*ordering)
 
         return bookings
 
@@ -76,6 +121,38 @@ class BookingListView(BookingQuerysetMixin, ListView):
             context["page_title"] = f"Bookings at {user.workshop}" if user.workshop_id else "Bookings"
         else:
             context["page_title"] = "My bookings"
+        context["view_mode"] = self.get_view_mode()
+        context["sort_options"] = [
+            (key, label) for key, (label, _) in self.SORT_OPTIONS.items()
+        ]
+        selected_sort = self.request.GET.get("sort", "date_desc")
+        context["selected_sort"] = (
+            selected_sort if selected_sort in self.SORT_OPTIONS else "date_desc"
+        )
+        month = self.get_selected_month()
+        context["selected_month"] = month
+        context["month_label"] = month.strftime("%B %Y")
+        context["previous_month"] = (month - datetime.timedelta(days=1)).replace(day=1)
+        context["next_month"] = (
+            month.replace(day=28) + datetime.timedelta(days=4)
+        ).replace(day=1)
+        if context["view_mode"] == "calendar":
+            bookings_by_date = {}
+            for booking in context["bookings"]:
+                bookings_by_date.setdefault(booking.booking_date, []).append(booking)
+            context["calendar_weeks"] = [
+                [
+                    {
+                        "date": day,
+                        "in_month": day.month == month.month,
+                        "bookings": bookings_by_date.get(day, []),
+                    }
+                    for day in week
+                ]
+                for week in calendar.Calendar(firstweekday=0).monthdatescalendar(
+                    month.year, month.month
+                )
+            ]
         if self._is_staff():
             current = self.request.GET.get("status", "")
             context["status_filter"] = current if current in dict(Booking.STATUS_CHOICES) else ""
@@ -185,16 +262,35 @@ class BookingCreateView(BookingSaveMixin, RoleRequiredMixin, CreateView):
 class BookingUpdateView(BookingSaveMixin, BookingQuerysetMixin, UpdateView):
     context_object_name = "booking"
 
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        if (
+            not self.request.user.is_customer
+            and hasattr(self.object, "job_card")
+        ):
+            form.fields["open_invoice"] = forms.BooleanField(
+                required=False,
+                label="Open invoice after completing the service",
+                help_text="When selected, save changes and open this job's invoice if service status is Completed.",
+                widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            )
+        return form
+
     def get_object(self, queryset=None):
         booking = super().get_object(queryset)
         if not booking.can_be_edited_by(self.request.user):
             raise PermissionDenied
+        self.original_status = booking.status
         return booking
 
     def form_valid(self, form):
+        open_invoice = form.cleaned_data.get("open_invoice", False)
+        completes_service = form.cleaned_data.get("status") == "COMPLETED" and self.original_status != "COMPLETED"
         if not self.save_booking(form):
             return self.form_invalid(form)
         messages.success(self.request, "The booking has been updated.")
+        if open_invoice and completes_service and hasattr(self.object, "job_card"):
+            return redirect("jobcard_invoice", pk=self.object.job_card.pk)
         return redirect(self.get_success_url())
 
     def get_context_data(self, **kwargs):

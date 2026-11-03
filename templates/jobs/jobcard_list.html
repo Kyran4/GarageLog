@@ -32,7 +32,7 @@
                 {% if user.is_admin_role %}
                 <td>{{ job.mechanic.get_full_name|default:job.mechanic.username }}</td>
                 {% endif %}
-                <td>{{ job.get_status_display }}</td>
+                <td>{{ job.booking.get_status_display }}</td>
                 <td class="text-end">
                     <a class="btn btn-sm btn-outline-primary" href="{% url 'jobcard_detail' job.pk %}">Open<span class="visually-hidden"> job card #{{ job.id }}</span></a>
                 </td>

@@ -13,7 +13,8 @@
         {% if user.is_admin_role or user.is_mechanic %}
         {% if booking.job_card %}
         {% if user.is_admin_role or booking.job_card.mechanic == user %}
-        <a class="btn btn-primary" href="{% url 'jobcard_detail' booking.job_card.pk %}">View job card</a>
+        <a class="btn btn-primary" href="{% url 'jobcard_detail' booking.job_card.pk %}">Job card</a>
+        <a class="btn btn-outline-primary" href="{% url 'jobcard_invoice' booking.job_card.pk %}">Invoice</a>
         {% endif %}
         {% elif booking.status == 'CONFIRMED' and not booking.workshop.is_parts_warehouse %}
         <form method="post" action="{% url 'jobcard_create' booking.pk %}" class="d-inline">
@@ -21,6 +22,9 @@
             <button type="submit" class="btn btn-primary">Create job card</button>
         </form>
         {% endif %}
+        {% endif %}
+        {% if booking.job_card and user == booking.customer %}
+        <a class="btn btn-outline-primary" href="{% url 'jobcard_invoice' booking.job_card.pk %}">View invoice</a>
         {% endif %}
     </div>
 </div>
