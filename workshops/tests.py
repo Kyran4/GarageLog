@@ -1,7 +1,9 @@
 import datetime
+import io
 
 import pytest
 from django.core.exceptions import ValidationError
+from django.core.management import call_command
 
 from workshops.models import Workshop
 
@@ -137,3 +139,35 @@ def test_nothing_is_flagged_when_no_name_mentions_a_warehouse():
 
 def test_nothing_is_flagged_when_it_is_unclear_which_is_the_warehouse():
     assert flag('East Warehouse', 'West Warehouse') == []
+
+
+def test_seed_demo_workshops_creates_locations_without_users(db):
+    from accounts.models import User
+
+    output = io.StringIO()
+    call_command('seed_demo_workshops', stdout=output)
+
+    assert set(Workshop.objects.values_list('name', flat=True)) == {
+        'Auckland Central Workshop',
+        'North Shore Workshop',
+        'Parts Warehouse',
+    }
+    assert Workshop.get_warehouse().name == 'Parts Warehouse'
+    assert User.objects.count() == 0
+
+
+def test_seed_demo_workshops_is_safe_to_run_again_and_preserves_existing_warehouse(warehouse):
+    warehouse.name = 'Existing Warehouse'
+    warehouse.save()
+    workshop = Workshop.objects.create(
+        name='Auckland Central Workshop',
+        address='My real address',
+    )
+
+    call_command('seed_demo_workshops', stdout=io.StringIO())
+    call_command('seed_demo_workshops', stdout=io.StringIO())
+
+    assert Workshop.objects.filter(is_parts_warehouse=True).count() == 1
+    assert Workshop.get_warehouse() == warehouse
+    workshop.refresh_from_db()
+    assert workshop.address == 'My real address'

@@ -69,6 +69,14 @@ Set the From address to the same Gmail account you authorized. Store all credent
 
 The command also creates the two demo workshops and the parts warehouse.
 
+To create only the demo locations without adding demo accounts, run:
+
+```sh
+python manage.py seed_demo_workshops
+```
+
+Then run `python manage.py seed_demo_stock` to import the illustrative demo parts catalogue if it is empty and add sample stock to each location. These parts and quantities are for demonstration, not verified real inventory.
+
 ## Accounts and roles
 
 | URL | What it does |
