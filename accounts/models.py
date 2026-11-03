@@ -5,11 +5,11 @@ from django.db import models
 
 
 class UserManager(DjangoUserManager):
-    """Superusers made with `createsuperuser` get the ADMIN role and a verified email."""
+    """Superusers made with `createsuperuser` get the ADMIN role and approval."""
 
     def create_superuser(self, username, email=None, password=None, **extra_fields):
         extra_fields.setdefault('role', 'ADMIN')
-        extra_fields.setdefault('email_verified', True)
+        extra_fields.setdefault('is_approved', True)
         return super().create_superuser(username, email, password, **extra_fields)
 
 
@@ -26,7 +26,10 @@ class User(AbstractUser):
         default=Role.CUSTOMER,
     )
     phone = models.CharField(max_length=30, blank=True)
-    email_verified = models.BooleanField(default=False)
+    is_approved = models.BooleanField(
+        default=False,
+        help_text='Whether an admin has approved this account to use GarageLog.',
+    )
     workshop = models.ForeignKey(
         'workshops.Workshop',
         on_delete=models.SET_NULL,

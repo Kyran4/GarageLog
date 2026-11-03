@@ -25,6 +25,10 @@ SIGNUP_DATA = {
 }
 
 
+def is_logged_in(client):
+    return '_auth_user_id' in client.session
+
+
 def link_from_email(message, fragment):
     """Return the path of the first link in an email body that contains `fragment`."""
     for match in re.finditer(r'https?://[^\s/]+(/\S*)', message.body):
@@ -33,17 +37,13 @@ def link_from_email(message, fragment):
     raise AssertionError(f'no {fragment} link in email:\n{message.body}')
 
 
-def is_logged_in(client):
-    return '_auth_user_id' in client.session
-
-
 # ---------------------------------------------------------------- model
 
 
-def test_createsuperuser_gets_admin_role_and_verified_email(db):
+def test_createsuperuser_gets_admin_role_and_approval(db):
     user = User.objects.create_superuser('boss', 'boss@example.com', 'pw-Str0ng-123')
     assert user.role == User.Role.ADMIN
-    assert user.email_verified
+    assert user.is_approved
 
 
 def test_superuser_is_always_treated_as_admin(make_user):
@@ -64,7 +64,7 @@ def test_signup_page_loads(client):
     assert client.get(reverse('accounts:signup')).status_code == 200
 
 
-def test_signup_creates_inactive_customer_and_sends_verification_email(client):
+def test_signup_creates_customer_pending_admin_approval_without_sending_email(client):
     response = client.post(reverse('accounts:signup'), SIGNUP_DATA)
 
     assert response.status_code == 302
@@ -72,11 +72,9 @@ def test_signup_creates_inactive_customer_and_sends_verification_email(client):
     user = User.objects.get(username='newcustomer')
     assert user.role == User.Role.CUSTOMER
     assert not user.is_active
-    assert not user.email_verified
+    assert not user.is_approved
     assert user.check_password('Str0ng-Passw0rd!')
-    assert len(mail.outbox) == 1
-    assert mail.outbox[0].to == ['new@example.com']
-    assert '/accounts/verify/' in mail.outbox[0].body
+    assert mail.outbox == []
 
 
 def test_signup_cannot_set_role_or_staff_flags(client):
@@ -88,6 +86,33 @@ def test_signup_cannot_set_role_or_staff_flags(client):
     assert not user.is_staff
     assert not user.is_superuser
     assert not user.is_active
+
+
+def test_admin_can_approve_and_activate_pending_signup(client):
+    client.post(reverse('accounts:signup'), SIGNUP_DATA)
+    user = User.objects.get(username='newcustomer')
+    admin_user = User.objects.create_superuser(
+        'siteadmin', 'admin@example.com', 'Adm1n-Strong-Pass!',
+    )
+    client.force_login(admin_user)
+
+    response = client.post(
+        reverse('admin:accounts_user_changelist'),
+        {'action': 'approve_users', '_selected_action': [str(user.pk)]},
+        follow=True,
+    )
+
+    assert response.status_code == 200
+    user.refresh_from_db()
+    assert user.is_approved
+    assert user.is_active
+    client.logout()
+    response = client.post(reverse('accounts:login'), {
+        'username': user.username,
+        'password': SIGNUP_DATA['password1'],
+    })
+    assert response.status_code == 302
+    assert is_logged_in(client)
 
 
 def test_signup_rejects_duplicate_email_ignoring_case(client, customer):
@@ -128,78 +153,6 @@ def test_logged_in_user_is_redirected_away_from_signup(client, customer):
     assert response.url == reverse('dashboard')
 
 
-# ---------------------------------------------------------------- email verification
-
-
-def signed_up_user_and_link(client):
-    client.post(reverse('accounts:signup'), SIGNUP_DATA)
-    user = User.objects.get(username='newcustomer')
-    return user, link_from_email(mail.outbox[0], '/accounts/verify/')
-
-
-def test_verification_link_activates_account(client):
-    user, link = signed_up_user_and_link(client)
-
-    response = client.get(link)
-
-    assert response.status_code == 302
-    assert response.url == reverse('accounts:login')
-    user.refresh_from_db()
-    assert user.is_active
-    assert user.email_verified
-
-
-def test_bad_verification_token_does_not_activate_account(client):
-    user, link = signed_up_user_and_link(client)
-    bad_link = link.rsplit('/', 2)[0] + '/not-a-real-token/'
-
-    response = client.get(bad_link)
-
-    assert response.status_code == 400
-    assert 'accounts/verify_invalid.html' in [t.name for t in response.templates]
-    user.refresh_from_db()
-    assert not user.is_active
-
-
-def test_garbage_uid_shows_friendly_page(client):
-    response = client.get(reverse('accounts:verify_email', kwargs={'uidb64': 'zzz', 'token': 'abc-123'}))
-    assert response.status_code == 400
-    assert 'accounts/verify_invalid.html' in [t.name for t in response.templates]
-
-
-def test_expired_verification_link_is_rejected(client, settings):
-    user, link = signed_up_user_and_link(client)
-    settings.PASSWORD_RESET_TIMEOUT = -1  # every token is already too old
-
-    response = client.get(link)
-
-    assert response.status_code == 400
-    user.refresh_from_db()
-    assert not user.is_active
-
-
-def test_verification_link_cannot_be_used_twice(client):
-    _, link = signed_up_user_and_link(client)
-    client.get(link)
-
-    response = client.get(link)
-
-    assert response.status_code == 302
-    assert response.url == reverse('accounts:login')
-
-
-def test_resend_sends_new_link_only_to_unverified_accounts(client, make_user):
-    make_user('pending', is_active=False, email_verified=False)
-    make_user('done')
-
-    client.post(reverse('accounts:resend_verification'), {'email': 'pending@example.com'})
-    client.post(reverse('accounts:resend_verification'), {'email': 'done@example.com'})
-    response = client.post(reverse('accounts:resend_verification'), {'email': 'nobody@example.com'}, follow=True)
-
-    assert [m.to for m in mail.outbox] == [['pending@example.com']]
-    assert 'If that email address belongs to an unverified account' in response.content.decode()
-
-
 # ---------------------------------------------------------------- login / logout
 
 
@@ -207,7 +160,7 @@ def test_login_page_loads(client):
     assert client.get(reverse('accounts:login')).status_code == 200
 
 
-def test_verified_user_can_log_in_with_username(client, customer, password):
+def test_approved_user_can_log_in_with_username(client, customer, password):
     response = client.post(reverse('accounts:login'), {'username': 'customer', 'password': password})
 
     assert response.status_code == 302
@@ -253,18 +206,18 @@ def test_unknown_user_gets_same_error_as_wrong_password(client, db):
     assert 'username/email or password is incorrect' in response.content.decode()
 
 
-def test_unverified_user_is_told_to_verify_email(client, make_user, password):
-    make_user('pending', is_active=False, email_verified=False)
+def test_unapproved_user_is_told_to_wait_for_admin_approval(client, make_user, password):
+    make_user('pending', is_active=False, is_approved=False)
 
     response = client.post(reverse('accounts:login'), {'username': 'pending', 'password': password})
 
     assert response.status_code == 200
-    assert 'verify your email address' in response.content.decode()
+    assert 'awaiting admin approval' in response.content.decode()
     assert not is_logged_in(client)
 
 
-def test_unverified_account_with_wrong_password_gets_generic_error(client, make_user):
-    make_user('pending', is_active=False, email_verified=False)
+def test_unapproved_account_with_wrong_password_gets_generic_error(client, make_user):
+    make_user('pending', is_active=False, is_approved=False)
 
     response = client.post(reverse('accounts:login'), {'username': 'pending', 'password': 'wrong-password'})
 
@@ -272,7 +225,7 @@ def test_unverified_account_with_wrong_password_gets_generic_error(client, make_
 
 
 def test_disabled_user_is_told_account_is_disabled(client, make_user, password):
-    make_user('blocked', is_active=False, email_verified=True)
+    make_user('blocked', is_active=False, is_approved=True)
 
     response = client.post(reverse('accounts:login'), {'username': 'blocked', 'password': password})
 
@@ -299,7 +252,7 @@ def test_logout_requires_post_and_logs_out(client, customer):
 
 
 def test_backend_does_not_return_inactive_users(make_user, password):
-    make_user('pending', is_active=False, email_verified=False)
+    make_user('pending', is_active=False, is_approved=False)
     assert EmailOrUsernameBackend().authenticate(None, username='pending', password=password) is None
 
 
@@ -330,7 +283,7 @@ def test_user_can_update_profile(client, customer):
     customer.refresh_from_db()
     assert customer.last_name == 'Jones'
     assert customer.phone == '+64 21 555 1234'
-    assert customer.email_verified  # email unchanged, still verified
+    assert customer.is_approved
     assert mail.outbox == []
 
 
@@ -355,7 +308,7 @@ def test_profile_rejects_invalid_phone(client, customer):
     assert 'phone' in response.context['form'].errors
 
 
-def test_changing_email_requires_new_verification(client, customer):
+def test_changing_email_does_not_require_verification(client, customer):
     client.force_login(customer)
 
     client.post(reverse('accounts:profile'), {
@@ -364,9 +317,9 @@ def test_changing_email_requires_new_verification(client, customer):
 
     customer.refresh_from_db()
     assert customer.email == 'changed@example.com'
-    assert not customer.email_verified
-    assert customer.is_active  # can still log in while verifying
-    assert [m.to for m in mail.outbox] == [['changed@example.com']]
+    assert customer.is_approved
+    assert customer.is_active
+    assert mail.outbox == []
 
 
 def test_profile_cannot_change_role_or_username(client, customer):

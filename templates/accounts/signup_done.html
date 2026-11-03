@@ -1,13 +1,12 @@
 {% extends 'base.html' %}
 
-{% block title %}Check your email | GarageLog{% endblock %}
+{% block title %}Account submitted | GarageLog{% endblock %}
 
 {% block content %}
 <div class="row justify-content-center">
     <div class="col-md-8 col-lg-6">
-        <h1 class="h2 mb-3">Check your email</h1>
-        <p>Your account has been created. We've sent a verification link to your email address. Open it to activate your account, then log in.</p>
-        <p>The link works for 3 days. Didn't get it? <a href="{% url 'accounts:resend_verification' %}">Resend the verification email</a>.</p>
+        <h1 class="h2 mb-3">Account submitted</h1>
+        <p>Your account has been created and is waiting for an admin to approve it. You can log in after it has been approved.</p>
         <a class="btn btn-primary" href="{% url 'accounts:login' %}">Go to log in</a>
     </div>
 </div>
