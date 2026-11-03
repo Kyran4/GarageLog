@@ -1,12 +1,12 @@
 {% extends 'base.html' %}
 
-{% block title %}Account submitted | GarageLog{% endblock %}
+{% block title %}Account created | GarageLog{% endblock %}
 
 {% block content %}
 <div class="row justify-content-center">
     <div class="col-md-8 col-lg-6">
-        <h1 class="h2 mb-3">Account submitted</h1>
-        <p>Your account has been created and is waiting for an admin to approve it. You can log in after it has been approved.</p>
+        <h1 class="h2 mb-3">Account created</h1>
+        <p>Your customer account is ready. You can log in now. An admin can update your role if needed.</p>
         <a class="btn btn-primary" href="{% url 'accounts:login' %}">Go to log in</a>
     </div>
 </div>

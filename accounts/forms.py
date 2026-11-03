@@ -49,7 +49,7 @@ def _clean_unique_email(raw_email, exclude_pk=None):
 class SignUpForm(BootstrapFormMixin, UserCreationForm):
     email = forms.EmailField(
         label='Email address',
-        help_text='An admin will review your account before you can log in.',
+        help_text='Used for account contact and password resets.',
         widget=forms.EmailInput(attrs={'autocomplete': 'email'}),
     )
     first_name = forms.CharField(
@@ -75,12 +75,11 @@ class SignUpForm(BootstrapFormMixin, UserCreationForm):
 
     def save(self, commit=True):
         user = super().save(commit=False)
-        # Role and status are never taken from the form.
+        # Role and privilege flags are never taken from the form.
         user.role = User.Role.CUSTOMER
         user.is_staff = False
         user.is_superuser = False
-        user.is_active = False
-        user.is_approved = False
+        user.is_active = True
         if commit:
             user.save()
             self.save_m2m()
@@ -96,7 +95,6 @@ class LoginForm(BootstrapFormMixin, AuthenticationForm):
     error_messages = {
         'invalid_login': 'The username/email or password is incorrect. Please check both and try again.',
         'inactive': 'This account has been disabled. Please contact the workshop for help.',
-        'pending_approval': 'Your account is awaiting admin approval. Please try again later.',
     }
 
     def clean(self):
@@ -105,16 +103,11 @@ class LoginForm(BootstrapFormMixin, AuthenticationForm):
         if identifier is not None and password:
             self.user_cache = authenticate(self.request, username=identifier, password=password)
             if self.user_cache is None:
-                # Only disclose account status when the password is correct.
                 account = get_user_by_login(identifier)
                 if account is not None and account.check_password(password):
-                    if not account.is_approved:
-                        code = 'pending_approval'
-                    elif not account.is_active:
-                        code = 'inactive'
-                    else:
+                    if account.is_active:
                         raise self.get_invalid_login_error()
-                    raise ValidationError(self.error_messages[code], code=code)
+                    raise ValidationError(self.error_messages['inactive'], code='inactive')
                 raise self.get_invalid_login_error()
             self.confirm_login_allowed(self.user_cache)
         return self.cleaned_data

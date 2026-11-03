@@ -15,8 +15,6 @@
                 <dd class="col-sm-8">{{ user.username }}</dd>
                 <dt class="col-sm-4">Role</dt>
                 <dd class="col-sm-8">{{ user.get_role_display }}</dd>
-                <dt class="col-sm-4">Account status</dt>
-                <dd class="col-sm-8 mb-0">{% if user.is_active %}Approved{% else %}Awaiting admin approval{% endif %}</dd>
             </dl>
         </div>
         <div class="gl-panel p-4 mb-4">

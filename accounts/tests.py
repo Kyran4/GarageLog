@@ -40,10 +40,9 @@ def link_from_email(message, fragment):
 # ---------------------------------------------------------------- model
 
 
-def test_createsuperuser_gets_admin_role_and_approval(db):
+def test_createsuperuser_gets_admin_role(db):
     user = User.objects.create_superuser('boss', 'boss@example.com', 'pw-Str0ng-123')
     assert user.role == User.Role.ADMIN
-    assert user.is_approved
 
 
 def test_superuser_is_always_treated_as_admin(make_user):
@@ -64,17 +63,22 @@ def test_signup_page_loads(client):
     assert client.get(reverse('accounts:signup')).status_code == 200
 
 
-def test_signup_creates_customer_pending_admin_approval_without_sending_email(client):
+def test_signup_creates_active_customer_without_sending_email(client):
     response = client.post(reverse('accounts:signup'), SIGNUP_DATA)
 
     assert response.status_code == 302
     assert response.url == reverse('accounts:signup_done')
     user = User.objects.get(username='newcustomer')
     assert user.role == User.Role.CUSTOMER
-    assert not user.is_active
-    assert not user.is_approved
+    assert user.is_active
     assert user.check_password('Str0ng-Passw0rd!')
     assert mail.outbox == []
+    login_response = client.post(reverse('accounts:login'), {
+        'username': user.username,
+        'password': SIGNUP_DATA['password1'],
+    })
+    assert login_response.status_code == 302
+    assert is_logged_in(client)
 
 
 def test_signup_cannot_set_role_or_staff_flags(client):
@@ -85,34 +89,47 @@ def test_signup_cannot_set_role_or_staff_flags(client):
     assert user.role == User.Role.CUSTOMER
     assert not user.is_staff
     assert not user.is_superuser
-    assert not user.is_active
+    assert user.is_active
 
 
-def test_admin_can_approve_and_activate_pending_signup(client):
+def test_admin_can_change_new_user_role_and_assign_workshop(client):
     client.post(reverse('accounts:signup'), SIGNUP_DATA)
     user = User.objects.get(username='newcustomer')
     admin_user = User.objects.create_superuser(
         'siteadmin', 'admin@example.com', 'Adm1n-Strong-Pass!',
     )
+    workshop = Workshop.objects.create(name='Garage Workshop')
     client.force_login(admin_user)
 
-    response = client.post(
-        reverse('admin:accounts_user_changelist'),
-        {'action': 'approve_users', '_selected_action': [str(user.pk)]},
-        follow=True,
-    )
+    change_url = reverse('admin:accounts_user_change', args=[user.pk])
+    response = client.get(change_url)
 
     assert response.status_code == 200
-    user.refresh_from_db()
-    assert user.is_approved
-    assert user.is_active
-    client.logout()
-    response = client.post(reverse('accounts:login'), {
+    assert 'role' in response.context['adminform'].form.fields
+    assert 'workshop' in response.context['adminform'].form.fields
+
+    response = client.post(change_url, {
         'username': user.username,
-        'password': SIGNUP_DATA['password1'],
+        'first_name': user.first_name,
+        'last_name': user.last_name,
+        'email': user.email,
+        'role': User.Role.MECHANIC,
+        'workshop': str(workshop.pk),
+        'phone': '',
+        'is_active': 'on',
+        'is_staff': '',
+        'is_superuser': '',
+        'groups': [],
+        'user_permissions': [],
+        'date_joined_0': user.date_joined.strftime('%Y-%m-%d'),
+        'date_joined_1': user.date_joined.strftime('%H:%M:%S'),
+        '_save': 'Save',
     })
-    assert response.status_code == 302
-    assert is_logged_in(client)
+
+    assert response.status_code == 302, response.context['adminform'].form.errors
+    user.refresh_from_db()
+    assert user.role == User.Role.MECHANIC
+    assert user.workshop == workshop
 
 
 def test_signup_rejects_duplicate_email_ignoring_case(client, customer):
@@ -206,26 +223,8 @@ def test_unknown_user_gets_same_error_as_wrong_password(client, db):
     assert 'username/email or password is incorrect' in response.content.decode()
 
 
-def test_unapproved_user_is_told_to_wait_for_admin_approval(client, make_user, password):
-    make_user('pending', is_active=False, is_approved=False)
-
-    response = client.post(reverse('accounts:login'), {'username': 'pending', 'password': password})
-
-    assert response.status_code == 200
-    assert 'awaiting admin approval' in response.content.decode()
-    assert not is_logged_in(client)
-
-
-def test_unapproved_account_with_wrong_password_gets_generic_error(client, make_user):
-    make_user('pending', is_active=False, is_approved=False)
-
-    response = client.post(reverse('accounts:login'), {'username': 'pending', 'password': 'wrong-password'})
-
-    assert 'username/email or password is incorrect' in response.content.decode()
-
-
 def test_disabled_user_is_told_account_is_disabled(client, make_user, password):
-    make_user('blocked', is_active=False, is_approved=True)
+    make_user('blocked', is_active=False)
 
     response = client.post(reverse('accounts:login'), {'username': 'blocked', 'password': password})
 
@@ -252,7 +251,7 @@ def test_logout_requires_post_and_logs_out(client, customer):
 
 
 def test_backend_does_not_return_inactive_users(make_user, password):
-    make_user('pending', is_active=False, is_approved=False)
+    make_user('pending', is_active=False)
     assert EmailOrUsernameBackend().authenticate(None, username='pending', password=password) is None
 
 
@@ -283,7 +282,6 @@ def test_user_can_update_profile(client, customer):
     customer.refresh_from_db()
     assert customer.last_name == 'Jones'
     assert customer.phone == '+64 21 555 1234'
-    assert customer.is_approved
     assert mail.outbox == []
 
 
@@ -317,7 +315,6 @@ def test_changing_email_does_not_require_verification(client, customer):
 
     customer.refresh_from_db()
     assert customer.email == 'changed@example.com'
-    assert customer.is_approved
     assert customer.is_active
     assert mail.outbox == []
 

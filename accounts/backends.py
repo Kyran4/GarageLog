@@ -34,13 +34,6 @@ class EmailOrUsernameBackend(ModelBackend):
             # Run the hasher anyway so timing does not reveal which accounts exist.
             UserModel().set_password(password)
             return None
-        if (
-            user.check_password(password)
-            and user.is_approved
-            and self.user_can_authenticate(user)
-        ):
+        if user.check_password(password) and self.user_can_authenticate(user):
             return user
         return None
-
-    def user_can_authenticate(self, user):
-        return user.is_approved and super().user_can_authenticate(user)

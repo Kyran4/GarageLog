@@ -34,11 +34,11 @@ Start the development server with `python manage.py runserver`, then open http:/
 
 Run the tests with `pytest`.
 
-Password-reset emails are printed in the terminal running the server, because the development email backend is the console. Signup does not send email; new accounts need admin approval before they can log in.
+Password-reset emails are printed in the terminal running the server, because the development email backend is the console. Signup does not send email or require verification; new accounts are active customers immediately.
 
 ### Optional production email for password resets
 
-The default email backend is for local development and prints password-reset messages to the console. To deliver password-reset emails from Render's free web service, which cannot use SMTP ports, configure the Gmail API and OAuth 2.0 credentials; this does not use your Gmail password. Email is not needed for signup or admin approval.
+The default email backend is for local development and prints password-reset messages to the console. To deliver password-reset emails from Render's free web service, which cannot use SMTP ports, configure the Gmail API and OAuth 2.0 credentials; this does not use your Gmail password. Email is not needed for signup.
 
 In Google Cloud Console, create a project, enable the Gmail API, configure the OAuth consent screen, and create an OAuth client ID. Authorize the app for the `https://www.googleapis.com/auth/gmail.send` scope and obtain an OAuth refresh token for the Gmail account that will send the messages. Keep the OAuth client secret and refresh token private. Google classifies this as a sensitive scope; an app left in External testing can have refresh tokens that expire after seven days.
 
@@ -81,13 +81,13 @@ Then run `python manage.py seed_demo_stock` to import the illustrative demo part
 
 | URL | What it does |
 | --- | --- |
-| `/accounts/signup/` | Customer signup; an admin must approve the account before login |
+| `/accounts/signup/` | Customer signup; accounts are active immediately |
 | `/accounts/login/` | Log in with username or email |
 | `/accounts/profile/` | View and edit your own profile |
 | `/accounts/password-reset/` | Reset a forgotten password |
 | `/dashboard/` | Redirects to your role's dashboard |
 
-New signups are always customers and must be approved by an admin before logging in. In Django admin (`/admin/`), select pending users and choose **Approve selected users and activate their accounts**, or edit an individual user and enable **Is approved**. To restrict a view to a role, use the mixins in `accounts/mixins.py`:
+New signups are always active customers. An admin can change a user's role and assign their workshop in Django admin (`/admin/`, "Users"). Mechanics must be assigned to a workshop. To restrict a view to a role, use the mixins in `accounts/mixins.py`:
 
 ```python
 from accounts.mixins import MechanicRequiredMixin

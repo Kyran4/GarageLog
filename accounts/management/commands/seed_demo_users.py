@@ -83,7 +83,6 @@ class Command(BaseCommand):
             user.first_name = first_name
             user.last_name = last_name
             user.is_active = True
-            user.is_approved = True
             user.is_staff = is_admin
             user.is_superuser = is_admin
             user.workshop = workshops[workshop_name] if workshop_name else None

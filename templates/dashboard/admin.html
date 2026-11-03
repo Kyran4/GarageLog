@@ -94,7 +94,7 @@
                     <td>{{ person.email }}</td>
                     <td>{{ person.get_role_display }}</td>
                     <td>{{ person.workshop.name|default:"-" }}</td>
-                    <td>{% if not person.is_approved %}Awaiting admin approval{% elif person.is_active %}Active{% else %}Disabled{% endif %}</td>
+                    <td>{% if person.is_active %}Active{% else %}Disabled{% endif %}</td>
                     <td>{{ person.date_joined|date:"j M Y" }}</td>
                 </tr>
                 {% empty %}

@@ -61,7 +61,7 @@ def password():
 
 @pytest.fixture
 def make_user(db):
-    """Create a verified, active user. Override any field with keyword arguments."""
+    """Create an active user. Override any field with keyword arguments."""
 
     def _make(username, role=User.Role.CUSTOMER, **extra):
         fields = {
@@ -69,7 +69,6 @@ def make_user(db):
             'password': PASSWORD,
             'role': role,
             'is_active': True,
-            'is_approved': True,
         }
         fields.update(extra)
         if role == User.Role.MECHANIC and 'workshop' not in fields:
