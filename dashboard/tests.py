@@ -99,21 +99,37 @@ def test_admin_dashboard_lists_users_and_counts(client, admin_user, customer, me
     assert response.context['customer_count'] == 1
     assert response.context['mechanic_count'] == 1
     assert response.context['admin_count'] == 1
+    assert list(response.context['customers']) == [customer]
+    assert list(response.context['mechanics']) == [mechanic]
+    assert list(response.context['admins']) == [admin_user]
     body = response.content.decode()
     assert 'customer@example.com' in body
     assert 'mechanic@example.com' in body
 
 
-def test_admin_dashboard_paginates(client, admin_user, make_user):
+def test_admin_dashboard_paginates_each_role_list_independently(client, admin_user, make_user):
     for number in range(25):
         make_user(f'bulk{number}')
     client.force_login(admin_user)
 
     first = client.get(reverse('admin_dashboard'))
-    second = client.get(reverse('admin_dashboard') + '?page=2')
+    second = client.get(reverse('admin_dashboard') + '?customers_page=2')
 
-    assert len(first.context['users']) == 20
-    assert len(second.context['users']) == 6
+    assert len(first.context['customers']) == 20
+    assert len(second.context['customers']) == 5
+    assert len(second.context['admins']) == 1
+
+
+def test_admin_dashboard_groups_superusers_as_admin(client, admin_user, make_user):
+    root = make_user('root', User.Role.CUSTOMER, is_superuser=True, is_staff=True)
+    client.force_login(admin_user)
+
+    response = client.get(reverse('admin_dashboard'))
+
+    assert root not in response.context['customers']
+    assert root in response.context['admins']
+    assert 'root@example.com' in response.content.decode()
+    assert response.context['admin_count'] == 2
 
 
 def test_navbar_changes_with_login_state(client, customer):

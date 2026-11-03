@@ -1,10 +1,11 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
 from django.db.models import Count, F, Q
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
-from django.views.generic import ListView, TemplateView
+from django.views.generic import TemplateView
 
 from accounts.mixins import AdminRequiredMixin, CustomerRequiredMixin, MechanicRequiredMixin
 from bookings.models import Booking
@@ -84,25 +85,34 @@ class MechanicDashboardView(MechanicRequiredMixin, TemplateView):
         return context
 
 
-class AdminDashboardView(AdminRequiredMixin, ListView):
-    """Admin shell with a read-only list of users."""
+class AdminDashboardView(AdminRequiredMixin, TemplateView):
+    """Admin shell with read-only, role-specific user lists."""
 
-    model = User
     template_name = 'dashboard/admin.html'
-    context_object_name = 'users'
     paginate_by = 20
-    ordering = ('-date_joined', '-pk')
 
-    def get_queryset(self):
-        return super().get_queryset().select_related('workshop')
+    def get_user_page(self, queryset, page_parameter):
+        queryset = queryset.select_related('workshop').order_by('-date_joined', '-pk')
+        return Paginator(queryset, self.paginate_by).get_page(self.request.GET.get(page_parameter))
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        counts = dict(User.objects.values_list('role').annotate(total=Count('pk')))
-        context['total_users'] = sum(counts.values())
-        context['customer_count'] = counts.get(User.Role.CUSTOMER, 0)
-        context['mechanic_count'] = counts.get(User.Role.MECHANIC, 0)
-        context['admin_count'] = counts.get(User.Role.ADMIN, 0)
+        role_querysets = {
+            'customers': User.objects.filter(role=User.Role.CUSTOMER, is_superuser=False),
+            'mechanics': User.objects.filter(role=User.Role.MECHANIC, is_superuser=False),
+            'admins': User.objects.filter(Q(role=User.Role.ADMIN) | Q(is_superuser=True)),
+        }
+        for name, queryset in role_querysets.items():
+            page_parameter = f'{name}_page'
+            page = self.get_user_page(queryset, page_parameter)
+            context[name] = page
+            context[f'{name}_page'] = page
+            context[f'{name}_count'] = page.paginator.count
+
+        context['total_users'] = User.objects.count()
+        context['customer_count'] = context['customers_count']
+        context['mechanic_count'] = context['mechanics_count']
+        context['admin_count'] = context['admins_count']
         context['pending_count'] = Booking.objects.filter(status='PENDING').count()
         context['upcoming_count'] = len(upcoming_bookings())
         context['vehicle_count'] = Vehicle.objects.count()
