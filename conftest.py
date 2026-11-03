@@ -69,7 +69,7 @@ def make_user(db):
             'password': PASSWORD,
             'role': role,
             'is_active': True,
-            'email_verified': True,
+            'is_approved': True,
         }
         fields.update(extra)
         if role == User.Role.MECHANIC and 'workshop' not in fields:

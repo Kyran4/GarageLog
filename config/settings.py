@@ -159,3 +159,7 @@ EMAIL_BACKEND = os.getenv(
     'EMAIL_BACKEND', 'accounts.console_email.ReadableConsoleEmailBackend'
 )
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'GarageLog <noreply@garagelog.local>')
+GMAIL_API_TIMEOUT = int(os.getenv('GMAIL_API_TIMEOUT', '10'))
+GMAIL_CLIENT_ID = os.getenv('GMAIL_CLIENT_ID', '')
+GMAIL_CLIENT_SECRET = os.getenv('GMAIL_CLIENT_SECRET', '')
+GMAIL_REFRESH_TOKEN = os.getenv('GMAIL_REFRESH_TOKEN', '')

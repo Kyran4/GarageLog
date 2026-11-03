@@ -34,7 +34,26 @@ Start the development server with `python manage.py runserver`, then open http:/
 
 Run the tests with `pytest`.
 
-Emails (verification links, password resets) are printed in the terminal running the server, because the development email backend is the console.
+Password-reset emails are printed in the terminal running the server, because the development email backend is the console. Signup does not send email; new accounts need admin approval before they can log in.
+
+### Optional production email for password resets
+
+The default email backend is for local development and prints password-reset messages to the console. To deliver password-reset emails from Render's free web service, which cannot use SMTP ports, configure the Gmail API and OAuth 2.0 credentials; this does not use your Gmail password. Email is not needed for signup or admin approval.
+
+In Google Cloud Console, create a project, enable the Gmail API, configure the OAuth consent screen, and create an OAuth client ID. Authorize the app for the `https://www.googleapis.com/auth/gmail.send` scope and obtain an OAuth refresh token for the Gmail account that will send the messages. Keep the OAuth client secret and refresh token private. Google classifies this as a sensitive scope; an app left in External testing can have refresh tokens that expire after seven days.
+
+Add these environment variables to the Render web service:
+
+| Variable | Value |
+| --- | --- |
+| `EMAIL_BACKEND` | `accounts.gmail_email.GmailEmailBackend` |
+| `DEFAULT_FROM_EMAIL` | `GarageLog <your-gmail-address@gmail.com>` |
+| `GMAIL_CLIENT_ID` | OAuth client ID from Google Cloud |
+| `GMAIL_CLIENT_SECRET` | OAuth client secret |
+| `GMAIL_REFRESH_TOKEN` | Refresh token authorized for `gmail.send` |
+| `GMAIL_API_TIMEOUT` | `10` (optional; request timeout in seconds) |
+
+Set the From address to the same Gmail account you authorized. Store all credentials only in Render's environment variables, never in source control. Save the variables and redeploy or restart the web service. Locally, the console backend remains active unless `EMAIL_BACKEND` is set.
 
 ## Demo users (development only)
 
@@ -54,13 +73,13 @@ The command also creates the two demo workshops and the parts warehouse.
 
 | URL | What it does |
 | --- | --- |
-| `/accounts/signup/` | Customer signup, then a verification link is emailed |
+| `/accounts/signup/` | Customer signup; an admin must approve the account before login |
 | `/accounts/login/` | Log in with username or email |
 | `/accounts/profile/` | View and edit your own profile |
 | `/accounts/password-reset/` | Reset a forgotten password |
 | `/dashboard/` | Redirects to your role's dashboard |
 
-New signups are always customers and must verify their email before logging in. To restrict a view to a role, use the mixins in `accounts/mixins.py`:
+New signups are always customers and must be approved by an admin before logging in. In Django admin (`/admin/`), select pending users and choose **Approve selected users and activate their accounts**, or edit an individual user and enable **Is approved**. To restrict a view to a role, use the mixins in `accounts/mixins.py`:
 
 ```python
 from accounts.mixins import MechanicRequiredMixin
