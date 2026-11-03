@@ -405,7 +405,7 @@ class InvoiceAccessMixin(LoginRequiredMixin):
             return cards
         if user.is_mechanic:
             return cards.filter(mechanic=user)
-        return cards.filter(booking__customer=user)
+        return cards.filter(booking__customer=user, booking__status="COMPLETED")
 
 
 class InvoiceView(InvoiceAccessMixin, DetailView):

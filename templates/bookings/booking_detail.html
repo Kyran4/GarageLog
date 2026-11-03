@@ -23,7 +23,7 @@
         </form>
         {% endif %}
         {% endif %}
-        {% if booking.job_card and user == booking.customer %}
+        {% if booking.job_card and user == booking.customer and booking.status == 'COMPLETED' %}
         <a class="btn btn-outline-primary" href="{% url 'jobcard_invoice' booking.job_card.pk %}">View invoice</a>
         {% endif %}
     </div>

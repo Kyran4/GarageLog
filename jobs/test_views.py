@@ -39,8 +39,15 @@ def test_job_card_permissions_are_scoped_to_assigned_mechanic(client, job_card, 
 
 def test_customer_can_only_view_their_own_invoice(client, job_card, customer, make_user):
     invoice = reverse("jobcard_invoice", kwargs={"pk": job_card.pk})
+    export = reverse("jobcard_invoice_export", kwargs={"pk": job_card.pk})
     client.force_login(customer)
+    assert client.get(invoice).status_code == 404
+    assert client.get(export).status_code == 404
+
+    job_card.booking.status = "COMPLETED"
+    job_card.booking.save(update_fields=["status"])
     assert client.get(invoice).status_code == 200
+    assert client.get(export).status_code == 200
 
     other_customer = make_user("other-customer")
     client.force_login(other_customer)
@@ -93,10 +100,14 @@ def test_job_card_status_can_be_changed_without_automatically_opening_invoice(cl
 def test_booking_screen_links_invoice_and_can_open_it_when_marking_service_complete(
     client, job_card, booking_data, vehicle
 ):
-    client.force_login(job_card.mechanic)
+    client.force_login(job_card.booking.customer)
     detail_url = reverse("booking_detail", kwargs={"pk": job_card.booking_id})
     detail = client.get(detail_url)
     invoice_url = reverse("jobcard_invoice", kwargs={"pk": job_card.pk})
+    assert invoice_url.encode() not in detail.content
+
+    client.force_login(job_card.mechanic)
+    detail = client.get(detail_url)
     assert invoice_url.encode() in detail.content
 
     edit_url = reverse("booking_edit", kwargs={"pk": job_card.booking_id})
@@ -115,6 +126,9 @@ def test_booking_screen_links_invoice_and_can_open_it_when_marking_service_compl
     assert response.url == invoice_url
     job_card.booking.refresh_from_db()
     assert job_card.booking.status == "COMPLETED"
+    client.force_login(job_card.booking.customer)
+    detail = client.get(detail_url)
+    assert invoice_url.encode() in detail.content
 
 
 def test_manual_part_cost_is_private_and_customer_charge_is_in_invoice(client, job_card, customer):
@@ -136,6 +150,8 @@ def test_manual_part_cost_is_private_and_customer_charge_is_in_invoice(client, j
         "Special alternator", Decimal("8.00"), Decimal("19.00"),
     )
 
+    job_card.booking.status = "COMPLETED"
+    job_card.booking.save(update_fields=["status"])
     client.force_login(customer)
     invoice = client.get(reverse("jobcard_invoice", kwargs={"pk": job_card.pk}))
     assert b"Special alternator" in invoice.content
@@ -201,6 +217,8 @@ def test_warehouse_part_defaults_freight_and_includes_it_in_customer_invoice(
     assert warehouse.stock.get(part=part).quantity == 3
     assert job_card.invoice_total == Decimal("85.99")
 
+    job_card.booking.status = "COMPLETED"
+    job_card.booking.save(update_fields=["status"])
     client.force_login(job_card.booking.customer)
     invoice = client.get(reverse("jobcard_invoice", kwargs={"pk": job_card.pk}))
     assert b"Order from warehouse freight" in invoice.content
