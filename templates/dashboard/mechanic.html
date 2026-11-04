@@ -23,7 +23,7 @@
     {% include 'dashboard/_action_card.html' with slug='parts' title='Find parts' text='Search the parts library by plate, or by make and model, and see what your workshop has in stock.' url=parts_url link_text='Search parts' %}
     {% if not is_warehouse %}
     {% include 'dashboard/_action_card.html' with slug='find' title='Find a vehicle' text='Look up any vehicle in GarageLog by number plate and read its service history.' url=vehicles_url link_text='Search vehicles' %}
-    {% include 'dashboard/_placeholder_card.html' with slug='jobs' title='Job cards' text='Update job status, notes and parts used.' %}
+    {% include 'dashboard/_link_card.html' with slug='analytics' title='Workshop analytics' count=booking_count text='Bookings and completed-job revenue for your workshop.' url=analytics_url link_text='View analytics' %}
     {% endif %}
 </div>
 

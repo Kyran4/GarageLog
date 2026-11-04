@@ -1,0 +1,105 @@
+{% extends 'base.html' %}
+
+{% block title %}Analytics | GarageLog{% endblock %}
+
+{% block content %}
+<div class="gl-banner mb-4">
+    <h1 class="h2">Analytics</h1>
+    <p class="text-body-secondary mb-0">
+        {% if is_admin_analytics %}
+        All-time GarageLog-wide performance across all workshops.
+        {% elif workshop %}
+        All-time performance for {{ workshop.name }}.
+        {% else %}
+        You aren't assigned to a workshop, so there is no workshop data to show.
+        {% endif %}
+    </p>
+</div>
+
+<section aria-labelledby="summary-heading" class="mb-4">
+    <h2 class="h5" id="summary-heading">At a glance</h2>
+    <div class="row g-3">
+        <div class="col-6 col-md-3">
+            <div class="card gl-card gl-accent h-100"><div class="card-body">
+                <p class="display-6 mb-0">{{ booking_count }}</p><p class="mb-0">Total bookings</p>
+            </div></div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card gl-card gl-accent h-100"><div class="card-body">
+                <p class="display-6 mb-0">{{ completed_job_count }}</p><p class="mb-0">Completed job cards</p>
+            </div></div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card gl-card gl-accent h-100"><div class="card-body">
+                <p class="display-6 mb-0">${{ revenue|floatformat:2 }}</p><p class="mb-0">Completed-job revenue</p>
+            </div></div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card gl-card gl-accent h-100"><div class="card-body">
+                <p class="display-6 mb-0">${{ average_invoice|floatformat:2 }}</p><p class="mb-0">Average completed invoice</p>
+            </div></div>
+        </div>
+    </div>
+    <p class="form-text mt-2">Revenue includes labour, customer part prices and freight for completed job cards.</p>
+</section>
+
+<div class="row g-4">
+    <section class="col-lg-6" aria-labelledby="status-heading">
+        <h2 class="h5" id="status-heading">Bookings by status</h2>
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead><tr><th scope="col">Status</th><th scope="col" class="text-end">Bookings</th></tr></thead>
+                <tbody>
+                    {% for row in status_rows %}
+                    <tr><th scope="row">{{ row.label }}</th><td class="text-end">{{ row.count }}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+    <section class="col-lg-6" aria-labelledby="services-heading">
+        <h2 class="h5" id="services-heading">Popular services</h2>
+        {% if service_rows %}
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead><tr><th scope="col">Service</th><th scope="col" class="text-end">Bookings</th></tr></thead>
+                <tbody>
+                    {% for row in service_rows %}
+                    <tr><th scope="row">{{ row.service_type }}</th><td class="text-end">{{ row.count }}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p>No bookings yet.</p>
+        {% endif %}
+    </section>
+</div>
+
+{% if is_admin_analytics %}
+<section class="mt-4" aria-labelledby="workshops-heading">
+    <h2 class="h5" id="workshops-heading">Workshop performance</h2>
+    {% if workshop_rows %}
+    <div class="table-responsive">
+        <table class="table table-striped align-middle">
+            <thead>
+                <tr><th scope="col">Workshop</th><th scope="col" class="text-end">Bookings</th><th scope="col" class="text-end">Completed bookings</th><th scope="col" class="text-end">Revenue</th></tr>
+            </thead>
+            <tbody>
+                {% for row in workshop_rows %}
+                <tr>
+                    <th scope="row">{{ row.workshop.name }}</th>
+                    <td class="text-end">{{ row.booking_count }}</td>
+                    <td class="text-end">{{ row.completed_count }}</td>
+                    <td class="text-end">${{ row.revenue|floatformat:2 }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p>No workshops yet.</p>
+    {% endif %}
+</section>
+{% endif %}
+{% endblock %}

@@ -27,7 +27,7 @@
     {% endif %}
     {% include 'dashboard/_link_card.html' with slug='vehicles' title='Vehicles' count=vehicle_count text='Vehicles registered with the workshop.' url=vehicles_url link_text='View vehicles' %}
     {% include 'dashboard/_link_card.html' with slug='parts' title='Parts library' count=part_count text='Parts in the shared catalogue. Each workshop keeps its own stock of them.' url=parts_url link_text='Search parts and stock' %}
-    {% include 'dashboard/_placeholder_card.html' with slug='analytics' title='Analytics' text='Bookings, revenue and upcoming expiries.' %}
+    {% include 'dashboard/_link_card.html' with slug='analytics' title='Analytics' count=booking_count text='Bookings, completed jobs and revenue across all workshops.' url=analytics_url link_text='View analytics' %}
 </div>
 
 <section aria-labelledby="workshops-heading" class="mb-4">

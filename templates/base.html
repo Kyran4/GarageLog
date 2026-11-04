@@ -200,6 +200,11 @@
                         <a class="nav-link{% if ns == 'inventory' %} active{% endif %}" {% if ns == 'inventory' %}aria-current="page" {% endif %} href="{% url 'inventory:search' %}">Parts</a>
                     </li>
                     {% endif %}
+                    {% if user.is_mechanic or user.is_admin_role %}
+                    <li class="nav-item">
+                        <a class="nav-link{% if url_name == 'analytics' %} active{% endif %}" {% if url_name == 'analytics' %}aria-current="page" {% endif %} href="{% url 'analytics' %}">Analytics</a>
+                    </li>
+                    {% endif %}
                     {% if user.is_admin_role or user.is_mechanic and user.workshop.is_parts_warehouse %}
                     <li class="nav-item">
                         <a class="nav-link{% if url_name == 'supplier_order_list' or url_name == 'supplier_order_create' %} active{% endif %}" href="{% url 'supplier_order_list' %}">Warehouse orders</a>

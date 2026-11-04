@@ -1,15 +1,23 @@
+from decimal import Decimal
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Count, F, Q
+from django.db.models import Count, DecimalField, ExpressionWrapper, F, Q, Sum
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.generic import TemplateView
 
-from accounts.mixins import AdminRequiredMixin, CustomerRequiredMixin, MechanicRequiredMixin
+from accounts.mixins import (
+    AdminRequiredMixin,
+    CustomerRequiredMixin,
+    MechanicRequiredMixin,
+    RoleRequiredMixin,
+)
 from bookings.models import Booking
 from inventory.models import Part, StockItem
+from jobs.models import JobCard, JobPart
 from vehicles.models import Vehicle
 from workshops.models import Workshop
 
@@ -82,6 +90,9 @@ class MechanicDashboardView(MechanicRequiredMixin, TemplateView):
         ).count() if user.workshop_id else 0
         context['parts_url'] = reverse('inventory:search')
         context['low_stock_url'] = reverse('inventory:stock') + '?low=1'
+        context['booking_count'] = Booking.objects.filter(workshop_id=user.workshop_id).count() \
+            if user.workshop_id else 0
+        context['analytics_url'] = reverse('analytics')
         return context
 
 
@@ -142,4 +153,97 @@ class AdminDashboardView(AdminRequiredMixin, TemplateView):
         context['bookings_url'] = reverse('booking_list')
         context['pending_url'] = reverse('booking_list') + '?status=PENDING'
         context['vehicles_url'] = reverse('vehicles:list')
+        context['booking_count'] = Booking.objects.count()
+        context['analytics_url'] = reverse('analytics')
+        return context
+
+
+class AnalyticsView(RoleRequiredMixin, TemplateView):
+    allowed_roles = (User.Role.ADMIN, User.Role.MECHANIC)
+    template_name = 'dashboard/analytics.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+        is_admin = user.is_admin_role
+
+        bookings = Booking.objects.all()
+        if not is_admin:
+            bookings = bookings.filter(workshop_id=user.workshop_id)
+
+        status_counts = dict(
+            bookings.values('status').annotate(count=Count('pk')).values_list('status', 'count')
+        )
+        context['booking_count'] = bookings.count()
+        context['status_rows'] = [
+            {'label': label, 'count': status_counts.get(value, 0)}
+            for value, label in Booking.STATUS_CHOICES
+        ]
+        context['service_rows'] = list(
+            bookings.values('service_type')
+            .annotate(count=Count('pk'))
+            .order_by('-count', 'service_type')
+        )
+
+        completed_jobs = JobCard.objects.filter(booking__status='COMPLETED')
+        completed_parts = JobPart.objects.filter(job_card__booking__status='COMPLETED')
+        if not is_admin:
+            completed_jobs = completed_jobs.filter(booking__workshop_id=user.workshop_id)
+            completed_parts = completed_parts.filter(
+                job_card__booking__workshop_id=user.workshop_id,
+            )
+
+        labor_total = completed_jobs.aggregate(total=Sum('labor_charge'))['total'] or Decimal('0.00')
+        parts_total = completed_parts.aggregate(
+            total=Sum(ExpressionWrapper(
+                F('unit_price') * F('quantity') + F('freight_charge'),
+                output_field=DecimalField(max_digits=12, decimal_places=2),
+            ))
+        )['total'] or Decimal('0.00')
+        revenue = labor_total + parts_total
+        completed_job_count = completed_jobs.count()
+        context['completed_job_count'] = completed_job_count
+        context['revenue'] = revenue
+        context['average_invoice'] = (
+            revenue / completed_job_count if completed_job_count else Decimal('0.00')
+        )
+        context['workshop'] = user.workshop if not is_admin else None
+        context['is_admin_analytics'] = is_admin
+
+        if is_admin:
+            workshop_bookings = {
+                row['workshop_id']: row
+                for row in bookings.values('workshop_id').annotate(
+                    booking_count=Count('pk'),
+                    completed_count=Count('pk', filter=Q(status='COMPLETED')),
+                )
+            }
+            workshop_labor = dict(
+                JobCard.objects.filter(booking__status='COMPLETED')
+                .values_list('booking__workshop_id')
+                .annotate(total=Sum('labor_charge'))
+                .values_list('booking__workshop_id', 'total')
+            )
+            workshop_parts = dict(
+                JobPart.objects.filter(job_card__booking__status='COMPLETED')
+                .values_list('job_card__booking__workshop_id')
+                .annotate(total=Sum(ExpressionWrapper(
+                    F('unit_price') * F('quantity') + F('freight_charge'),
+                    output_field=DecimalField(max_digits=12, decimal_places=2),
+                )))
+                .values_list('job_card__booking__workshop_id', 'total')
+            )
+            context['workshop_rows'] = [
+                {
+                    'workshop': workshop,
+                    'booking_count': workshop_bookings.get(workshop.pk, {}).get('booking_count', 0),
+                    'completed_count': workshop_bookings.get(workshop.pk, {}).get('completed_count', 0),
+                    'revenue': (
+                        workshop_labor.get(workshop.pk) or Decimal('0.00')
+                    ) + (
+                        workshop_parts.get(workshop.pk) or Decimal('0.00')
+                    ),
+                }
+                for workshop in Workshop.objects.filter(is_parts_warehouse=False).order_by('name')
+            ]
         return context

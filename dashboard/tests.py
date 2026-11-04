@@ -1,4 +1,5 @@
 import datetime
+from decimal import Decimal
 
 import pytest
 from django.urls import reverse
@@ -6,6 +7,7 @@ from django.utils import timezone
 
 from accounts.models import User
 from bookings.tests import frozen_now
+from jobs.models import JobCard, JobPart
 
 pytestmark = pytest.mark.django_db
 
@@ -340,3 +342,54 @@ def test_the_warehouse_row_has_no_hours_mechanics_or_bookings(client, admin_user
     assert warehouse_row.count('Not applicable') == 3  # hours, mechanics and upcoming bookings
     assert 'Monday' not in warehouse_row and 'bookings' not in warehouse_row.lower()
     assert 'Monday to Friday' in workshop_row and 'Not applicable' not in workshop_row  # workshops are unchanged
+
+
+def test_analytics_is_global_for_admin_and_limited_to_mechanics_workshop(
+    client, admin_user, mechanic, other_workshop, customer, make_booking, make_user, workshop,
+):
+    other_mechanic = make_user('other-mechanic', User.Role.MECHANIC, workshop=other_workshop)
+    own_booking = make_booking(
+        customer, status='COMPLETED', workshop=workshop, mechanic=mechanic,
+        service_type='Oil Change',
+    )
+    own_job = JobCard.objects.create(
+        booking=own_booking, mechanic=mechanic, labor_charge=Decimal('50.00'),
+    )
+    JobPart.objects.create(
+        job_card=own_job, name='Oil filter', source=JobPart.Source.MANUAL, quantity=2,
+        unit_cost=Decimal('10.00'), unit_price=Decimal('20.00'),
+        freight_charge=Decimal('5.00'),
+    )
+    other_booking = make_booking(
+        customer, status='COMPLETED', workshop=other_workshop, mechanic=other_mechanic,
+        service_type='Transmission Repair',
+    )
+    JobCard.objects.create(
+        booking=other_booking, mechanic=other_mechanic, labor_charge=Decimal('100.00'),
+    )
+    make_booking(customer, workshop=other_workshop, mechanic=other_mechanic, service_type='Inspection')
+
+    client.force_login(admin_user)
+    admin_response = client.get(reverse('analytics'))
+    assert admin_response.status_code == 200
+    assert admin_response.context['booking_count'] == 3
+    assert admin_response.context['completed_job_count'] == 2
+    assert admin_response.context['revenue'] == Decimal('195.00')
+    assert admin_response.context['average_invoice'] == Decimal('97.50')
+    assert {row['workshop'].pk for row in admin_response.context['workshop_rows']} >= {
+        workshop.pk, other_workshop.pk,
+    }
+
+    client.force_login(mechanic)
+    mechanic_response = client.get(reverse('analytics'))
+    assert mechanic_response.status_code == 200
+    assert mechanic_response.context['booking_count'] == 1
+    assert mechanic_response.context['completed_job_count'] == 1
+    assert mechanic_response.context['revenue'] == Decimal('95.00')
+    assert 'Workshop performance' not in mechanic_response.content.decode()
+    assert 'Transmission Repair' not in mechanic_response.content.decode()
+
+
+def test_customers_cannot_access_analytics(client, customer):
+    client.force_login(customer)
+    assert client.get(reverse('analytics')).status_code == 403
