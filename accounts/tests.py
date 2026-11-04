@@ -5,6 +5,7 @@ from django.core import mail
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.test import Client
 from django.urls import reverse
 
 from accounts.backends import EmailOrUsernameBackend
@@ -185,6 +186,25 @@ def test_user_can_log_in_with_email_in_any_case(client, customer, password):
 
     assert response.status_code == 302
     assert is_logged_in(client)
+
+
+def test_new_login_invalidates_the_previous_session(customer, password):
+    first_client = Client()
+    second_client = Client()
+    login_url = reverse('accounts:login')
+    credentials = {'username': customer.username, 'password': password}
+
+    assert first_client.post(login_url, credentials).status_code == 302
+    assert second_client.post(login_url, credentials).status_code == 302
+    assert is_logged_in(first_client)
+    assert is_logged_in(second_client)
+
+    previous_session_response = first_client.get(reverse('dashboard'))
+    assert previous_session_response.status_code == 302
+    assert previous_session_response.url == login_url
+    assert not is_logged_in(first_client)
+    assert second_client.get(reverse('dashboard')).status_code == 302
+    assert is_logged_in(second_client)
 
 
 def test_login_respects_safe_next_parameter(client, customer, password):

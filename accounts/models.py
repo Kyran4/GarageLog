@@ -25,6 +25,7 @@ class User(AbstractUser):
         default=Role.CUSTOMER,
     )
     phone = models.CharField(max_length=30, blank=True)
+    active_session_key = models.CharField(max_length=40, blank=True, null=True, editable=False)
     workshop = models.ForeignKey(
         'workshops.Workshop',
         on_delete=models.SET_NULL,
