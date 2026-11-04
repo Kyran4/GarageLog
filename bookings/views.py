@@ -45,8 +45,8 @@ class BookingListView(BookingQuerysetMixin, ListView):
     paginate_by = 20
 
     SORT_OPTIONS = {
-        "date_desc": ("Newest date", ("-booking_date", "-booking_time")),
         "date_asc": ("Oldest date", ("booking_date", "booking_time")),
+        "date_desc": ("Newest date", ("-booking_date", "-booking_time")),
         "time_asc": ("Time (earliest first)", ("booking_time", "booking_date")),
         "time_desc": ("Time (latest first)", ("-booking_time", "booking_date")),
         "service": ("Service (A-Z)", ("service_type", "-booking_date", "-booking_time")),
