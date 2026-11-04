@@ -142,13 +142,15 @@ def test_manual_part_cost_is_private_and_customer_charge_is_in_invoice(client, j
             "quantity": "2",
             "unit_cost": "8.00",
             "unit_price": "19.00",
+            "freight_charge": "6.50",
         },
     )
     assert response.status_code == 302
     item = JobPart.objects.get(job_card=job_card)
-    assert (item.name, item.unit_cost, item.unit_price) == (
-        "Special alternator", Decimal("8.00"), Decimal("19.00"),
+    assert (item.name, item.unit_cost, item.unit_price, item.freight_charge) == (
+        "Special alternator", Decimal("8.00"), Decimal("19.00"), Decimal("6.50"),
     )
+    assert job_card.invoice_total == Decimal("89.50")
 
     job_card.booking.status = "COMPLETED"
     job_card.booking.save(update_fields=["status"])
@@ -156,6 +158,7 @@ def test_manual_part_cost_is_private_and_customer_charge_is_in_invoice(client, j
     invoice = client.get(reverse("jobcard_invoice", kwargs={"pk": job_card.pk}))
     assert b"Special alternator" in invoice.content
     assert b"38.00" in invoice.content
+    assert b"6.50" in invoice.content
     assert b"$8.00" not in invoice.content
 
     exported = client.get(reverse("jobcard_invoice_export", kwargs={"pk": job_card.pk}))

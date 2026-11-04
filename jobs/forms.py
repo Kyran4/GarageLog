@@ -66,7 +66,7 @@ class JobPartForm(BootstrapFormMixin, forms.ModelForm):
         }
         help_texts = {
             "unit_cost": "Internal only. Customers see the customer unit price, not this cost.",
-            "freight_charge": "Customer-visible freight per ordered part; warehouse orders default to $12.99.",
+            "freight_charge": "Customer-visible freight per part; warehouse orders default to $12.99.",
         }
 
     def __init__(self, *args, workshop=None, **kwargs):
@@ -105,7 +105,6 @@ class JobPartForm(BootstrapFormMixin, forms.ModelForm):
                 self.add_error("unit_cost", "Enter the cost to obtain this part.")
             if price is None:
                 self.add_error("unit_price", "Enter the price to charge the customer.")
-            cleaned["freight_charge"] = Decimal("0.00")
         elif part:
             quantity = cleaned.get("quantity") or 1
             workshop_stock = StockItem.objects.filter(

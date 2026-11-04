@@ -6,8 +6,12 @@
 <div class="row justify-content-center">
     <div class="col-md-8 col-lg-6">
         <h1 class="h2 mb-3">Account created</h1>
-        <p>Your customer account is ready. You can log in now. An admin can update your role if needed.</p>
-        <a class="btn btn-primary" href="{% url 'accounts:login' %}">Go to log in</a>
+        <p>Your customer account is ready. An admin can update your role if needed.</p>
+        {% if request.user.is_authenticated %}
+            <a class="btn btn-primary" href="{% url 'dashboard' %}">Go to dashboard</a>
+        {% else %}
+            <a class="btn btn-primary" href="{% url 'accounts:login' %}">Go to log in</a>
+        {% endif %}
     </div>
 </div>
 {% endblock %}

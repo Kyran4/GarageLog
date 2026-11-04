@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.contrib.auth import login
 from django.contrib.auth import views as auth_views
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import redirect, render
@@ -20,7 +21,7 @@ from .models import User
 class SignUpView(FormView):
     template_name = 'accounts/signup.html'
     form_class = SignUpForm
-    success_url = reverse_lazy('accounts:signup_done')
+    success_url = reverse_lazy('dashboard')
 
     def dispatch(self, request, *args, **kwargs):
         if request.user.is_authenticated:
@@ -28,7 +29,12 @@ class SignUpView(FormView):
         return super().dispatch(request, *args, **kwargs)
 
     def form_valid(self, form):
-        form.save()
+        user = form.save()
+        login(self.request, user, backend='accounts.backends.EmailOrUsernameBackend')
+        messages.success(
+            self.request,
+            f'Welcome, {user.first_name or user.username}. Your account is ready.',
+        )
         return super().form_valid(form)
 
 

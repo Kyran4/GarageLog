@@ -63,22 +63,17 @@ def test_signup_page_loads(client):
     assert client.get(reverse('accounts:signup')).status_code == 200
 
 
-def test_signup_creates_active_customer_without_sending_email(client):
+def test_signup_creates_active_customer_and_logs_them_in_without_sending_email(client):
     response = client.post(reverse('accounts:signup'), SIGNUP_DATA)
 
     assert response.status_code == 302
-    assert response.url == reverse('accounts:signup_done')
+    assert response.url == reverse('dashboard')
+    assert is_logged_in(client)
     user = User.objects.get(username='newcustomer')
     assert user.role == User.Role.CUSTOMER
     assert user.is_active
     assert user.check_password('Str0ng-Passw0rd!')
     assert mail.outbox == []
-    login_response = client.post(reverse('accounts:login'), {
-        'username': user.username,
-        'password': SIGNUP_DATA['password1'],
-    })
-    assert login_response.status_code == 302
-    assert is_logged_in(client)
 
 
 def test_signup_cannot_set_role_or_staff_flags(client):
