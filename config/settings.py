@@ -15,6 +15,7 @@ from pathlib import Path
 
 import dj_database_url
 from django.contrib import messages
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -25,17 +26,24 @@ load_dotenv(BASE_DIR / '.env')
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-garage-log-development-key')
-
-# SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'True').lower() in ('true', '1', 'yes', 'on')
 
-ALLOWED_HOSTS = [
-    host.strip()
-    for host in os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
-    if host.strip()
-]
+SECRET_KEY = os.getenv('SECRET_KEY')
+if not SECRET_KEY:
+    if not DEBUG:
+        raise ImproperlyConfigured('Set a unique SECRET_KEY when DEBUG is off.')
+    SECRET_KEY = 'django-insecure-garage-log-development-key'
+elif not DEBUG and SECRET_KEY == 'replace-with-a-unique-secret-key':
+    raise ImproperlyConfigured('Replace the example SECRET_KEY before deploying with DEBUG off.')
+
+allowed_hosts = os.getenv('ALLOWED_HOSTS')
+if not allowed_hosts:
+    if not DEBUG:
+        raise ImproperlyConfigured('Set ALLOWED_HOSTS to your production hostnames when DEBUG is off.')
+    allowed_hosts = 'localhost,127.0.0.1'
+ALLOWED_HOSTS = [host.strip() for host in allowed_hosts.split(',') if host.strip()]
+if not DEBUG and not ALLOWED_HOSTS:
+    raise ImproperlyConfigured('Set ALLOWED_HOSTS to your production hostnames when DEBUG is off.')
 
 
 # Application definition

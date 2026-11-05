@@ -20,6 +20,12 @@ share/python-wheels/
 venv/
 ENV/
 .env
-db.sqlite3
+.env.*
+!.env.example
+*.sqlite3
+*.db
 staticfiles/
 .pytest_cache/
+media/
+*.log
+.coverage

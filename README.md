@@ -1,8 +1,21 @@
 # GarageLog
 
-Vehicle service management and maintenance reminder platform for independent workshops (Django).
+GarageLog is a Django-based vehicle service management app for independent workshops. It brings customer bookings, workshop scheduling, vehicle service histories, job cards, parts inventory, and invoices into one place.
+
+## Features
+
+- Customer, mechanic, and admin roles with role- and workshop-scoped access.
+- Vehicle registration with WoF and registration expiry reminders.
+- Workshop-aware appointment booking, capacity checks, and booking status updates.
+- Job cards with an optional handover checklist, parts usage, and customer invoices.
+- Shared parts catalogue, workshop stock, low-stock indicators, and warehouse orders.
+- Dashboards, analytics, in-app customer updates, and printable service summaries.
+
+The demo parts catalogue and fitments are illustrative only. Do not rely on them for real vehicle compatibility, safety, pricing, or stock decisions.
 
 ## Setup
+
+Requires Python 3.12 or later.
 
 ### Windows PowerShell
 
@@ -28,36 +41,42 @@ python manage.py seed_demo_users
 python manage.py seed_demo_stock
 ```
 
+The demo-user command creates accounts using the publicly documented development password below. Use these only on a local development database; never deploy or expose a site populated with demo users.
+
 ## Run
 
 Start the development server with `python manage.py runserver`, then open http://127.0.0.1:8000/.
 
-Run the tests with `pytest`.
+Run checks and tests with:
 
-Password-reset emails are printed in the terminal running the server, because the development email backend is the console. Signup does not send email or require verification; new accounts are active customers immediately.
+```sh
+python manage.py check
+python manage.py makemigrations --check --dry-run
+pytest
+```
 
-### Optional production email for password resets
+## Email behavior
 
-The default email backend is for local development and prints password-reset messages to the console. To deliver password-reset emails from Render's free web service, which cannot use SMTP ports, configure the Gmail API and OAuth 2.0 credentials; this does not use your Gmail password. Email is not needed for signup.
+Booking status changes are shown to customers as in-app updates; no email service is needed for that workflow. Password-reset emails use a development backend that prints the message in the server terminal. Signup does not send email or require verification; new accounts are active customers immediately.
 
-In Google Cloud Console, create a project, enable the Gmail API, configure the OAuth consent screen, and create an OAuth client ID. Authorize the app for the `https://www.googleapis.com/auth/gmail.send` scope and obtain an OAuth refresh token for the Gmail account that will send the messages. Keep the OAuth client secret and refresh token private. Google classifies this as a sensitive scope; an app left in External testing can have refresh tokens that expire after seven days.
+An optional Gmail API backend is available for password resets. It requires separately configured Google OAuth credentials and is not enabled by default. Never put OAuth credentials in this repository; configure them as private environment variables on the host.
 
-Add these environment variables to the Render web service:
+## Deployment and secrets
 
-| Variable | Value |
-| --- | --- |
-| `EMAIL_BACKEND` | `accounts.gmail_email.GmailEmailBackend` |
-| `DEFAULT_FROM_EMAIL` | `GarageLog <your-gmail-address@gmail.com>` |
-| `GMAIL_CLIENT_ID` | OAuth client ID from Google Cloud |
-| `GMAIL_CLIENT_SECRET` | OAuth client secret |
-| `GMAIL_REFRESH_TOKEN` | Refresh token authorized for `gmail.send` |
-| `GMAIL_API_TIMEOUT` | `10` (optional; request timeout in seconds) |
+This repository is a development project, not a production-ready deployment recipe. Before running it on a public host:
 
-Set the From address to the same Gmail account you authorized. Store all credentials only in Render's environment variables, never in source control. Save the variables and redeploy or restart the web service. Locally, the console backend remains active unless `EMAIL_BACKEND` is set.
+- Set `DEBUG=False`.
+- Set a new, high-entropy `SECRET_KEY`; do not use the example value. Generate one with `python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"` and store it only in the host's secret environment settings.
+- Set `ALLOWED_HOSTS` to the exact hostnames serving the app.
+- Configure a production database with `DATABASE_URL`, HTTPS, secure cookie settings, backups, and a production email backend if password resets must be delivered.
+- Do not run `seed_demo_users` or expose demo accounts on a public deployment.
+- Review Django's deployment checklist and run `python manage.py check --deploy` against the deployment configuration.
+
+Settings reject a missing/example secret key or missing `ALLOWED_HOSTS` when `DEBUG` is off. `.env` files, local databases, logs, uploads, and collected static files are ignored by Git; `.env.example` contains placeholders only. Keep real credentials in your hosting provider's secret environment settings.
 
 ## Demo users (development only)
 
-`python manage.py seed_demo_users` creates these users, all with the password `GarageLog-demo-1`. It refuses to run when `DEBUG` is off.
+`python manage.py seed_demo_users` creates these users, all with the publicly known development password `GarageLog-demo-1`. The command refuses to run when `DEBUG` is off. This is demo-only data; do not reuse the password for any real account.
 
 | Username | Role |
 | --- | --- |
@@ -198,6 +217,10 @@ To add more parts to the library, add rows to the CSV (or make your own file) an
 - If any row has a problem, nothing is imported and the command lists the lines to fix.
 
 For real part numbers and fitment you would need licensed catalogue data (TecDoc is the industry standard) or an export from a workshop's own system, so the library is designed to take a CSV.
+
+## License
+
+No license has been selected for this repository yet. Until a license is added, public visibility does not grant permission to reuse, modify, or distribute the source.
 
 ## Git workflow
 
