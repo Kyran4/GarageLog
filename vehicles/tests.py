@@ -289,6 +289,35 @@ def test_expiry_badges_are_shown(client, customer, make_vehicle):
     assert 'Due soon' in body
 
 
+def test_owner_gets_a_maintenance_reminder_and_mechanic_does_not(client, customer, mechanic, make_vehicle):
+    today = timezone.localdate()
+    car = make_vehicle(customer, wof_expiry=today, rego_expiry=None)
+    detail_url = reverse('vehicles:detail', kwargs={'pk': car.pk})
+
+    client.force_login(customer)
+    owner_response = client.get(detail_url)
+    assert owner_response.context['show_maintenance_reminder'] is True
+    assert 'Maintenance reminders' in owner_response.content.decode()
+    assert reverse('vehicles:edit', kwargs={'pk': car.pk}) in owner_response.content.decode()
+
+    client.force_login(mechanic)
+    mechanic_response = client.get(detail_url)
+    assert mechanic_response.context['show_maintenance_reminder'] is False
+    assert 'Maintenance reminders' not in mechanic_response.content.decode()
+
+
+def test_completed_service_history_links_to_printable_summary(client, customer, mechanic, vehicle, make_booking):
+    from jobs.models import JobCard
+
+    booking = make_booking(customer, vehicle, status='COMPLETED')
+    job_card = JobCard.objects.create(booking=booking, mechanic=mechanic)
+    client.force_login(customer)
+
+    body = client.get(reverse('vehicles:detail', kwargs={'pk': vehicle.pk})).content.decode()
+
+    assert reverse('jobcard_invoice', kwargs={'pk': job_card.pk}) in body
+
+
 
 # ---------------------------------------------------------------- mechanics: look up any vehicle by plate
 

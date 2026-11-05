@@ -91,6 +91,13 @@ class VehicleDetailView(VehicleAccessMixin, DetailView):
         context['history'] = history
 
         context['can_edit'] = user.is_admin_role or is_owner
+        context['is_owner'] = is_owner
+        context['show_maintenance_reminder'] = is_owner and (
+            vehicle.wof_status in ('expired', 'soon')
+            or vehicle.rego_status in ('expired', 'soon')
+            or vehicle.wof_expiry is None
+            or vehicle.rego_expiry is None
+        )
         context['is_staff_view'] = user.is_mechanic or user.is_admin_role
         # A mechanic sees a customer's contact details only once that customer has booked at their workshop.
         context['can_see_contact'] = (

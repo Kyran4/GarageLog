@@ -90,6 +90,17 @@ class MechanicDashboardView(MechanicRequiredMixin, TemplateView):
         ).count() if user.workshop_id else 0
         context['parts_url'] = reverse('inventory:search')
         context['low_stock_url'] = reverse('inventory:stock') + '?low=1'
+        context['pending_count'] = Booking.objects.filter(
+            workshop_id=user.workshop_id,
+            status='PENDING',
+        ).count() if user.workshop_id and not is_warehouse else 0
+        context['overdue_job_count'] = JobCard.objects.filter(
+            mechanic=user,
+            booking__booking_date__lt=timezone.localdate(),
+            booking__status__in=('CONFIRMED', 'IN_PROGRESS'),
+        ).count()
+        context['pending_url'] = reverse('booking_list') + '?status=PENDING'
+        context['overdue_jobs_url'] = reverse('jobcard_list') + '?overdue=1'
         context['booking_count'] = Booking.objects.filter(workshop_id=user.workshop_id).count() \
             if user.workshop_id else 0
         context['analytics_url'] = reverse('analytics')
@@ -125,6 +136,24 @@ class AdminDashboardView(AdminRequiredMixin, TemplateView):
         context['mechanic_count'] = context['mechanics_count']
         context['admin_count'] = context['admins_count']
         context['pending_count'] = Booking.objects.filter(status='PENDING').count()
+        context['overdue_job_count'] = JobCard.objects.filter(
+            booking__booking_date__lt=timezone.localdate(),
+            booking__status__in=('CONFIRMED', 'IN_PROGRESS'),
+        ).count()
+        context['overdue_jobs_url'] = reverse('jobcard_list') + '?overdue=1'
+        context['low_stock_rows'] = [
+            {
+                'workshop_name': row['workshop__name'],
+                'count': row['item_count'],
+                'url': reverse('inventory:stock') + f"?workshop={row['workshop_id']}&low=1",
+            }
+            for row in StockItem.objects.filter(
+                quantity__lte=F('reorder_level'),
+            ).values('workshop_id', 'workshop__name').annotate(
+                item_count=Count('pk'),
+            ).order_by('workshop__name')
+        ]
+        context['low_stock_count'] = sum(row['count'] for row in context['low_stock_rows'])
         context['upcoming_count'] = len(upcoming_bookings())
         context['vehicle_count'] = Vehicle.objects.count()
 

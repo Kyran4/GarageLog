@@ -1,7 +1,9 @@
+import datetime
 from decimal import Decimal
 
 import pytest
 from django.urls import reverse
+from django.utils import timezone
 
 from jobs.models import JobCard, JobPart, SupplierOrder
 
@@ -37,6 +39,30 @@ def test_job_card_permissions_are_scoped_to_assigned_mechanic(client, job_card, 
     assert client.get(detail).status_code == 200
 
 
+def test_overdue_job_card_filter_only_shows_old_incomplete_jobs_to_permitted_staff(
+    client, job_card, make_user, admin_user,
+):
+    job_card.booking.status = "IN_PROGRESS"
+    job_card.booking.booking_date = timezone.localdate() - datetime.timedelta(days=1)
+    job_card.booking.save(update_fields=["status", "booking_date"])
+    url = reverse("jobcard_list") + "?overdue=1"
+
+    client.force_login(job_card.mechanic)
+    response = client.get(url)
+    assert response.status_code == 200
+    assert list(response.context["job_cards"]) == [job_card]
+    assert response.context["page_title"] == "Overdue job cards"
+
+    job_card.booking.status = "COMPLETED"
+    job_card.booking.save(update_fields=["status"])
+    assert list(client.get(url).context["job_cards"]) == []
+
+    client.force_login(admin_user)
+    assert client.get(url).status_code == 200
+    client.force_login(make_user("not-staff"))
+    assert client.get(url).status_code == 403
+
+
 def test_customer_can_only_view_their_own_invoice(client, job_card, customer, make_user):
     invoice = reverse("jobcard_invoice", kwargs={"pk": job_card.pk})
     export = reverse("jobcard_invoice_export", kwargs={"pk": job_card.pk})
@@ -52,6 +78,25 @@ def test_customer_can_only_view_their_own_invoice(client, job_card, customer, ma
     other_customer = make_user("other-customer")
     client.force_login(other_customer)
     assert client.get(invoice).status_code == 404
+
+
+def test_printable_service_summary_includes_recorded_checklist(client, job_card, customer):
+    job_card.booking.status = "COMPLETED"
+    job_card.booking.save(update_fields=["status"])
+    job_card.checklist = {"tyres": "DONE", "lights": "NOT_APPLICABLE"}
+    job_card.checklist_notes = "Recheck tyre pressure at next visit."
+    job_card.save(update_fields=["checklist", "checklist_notes"])
+    client.force_login(customer)
+
+    response = client.get(reverse("jobcard_invoice", kwargs={"pk": job_card.pk}))
+
+    assert response.status_code == 200
+    assert b"Recorded handover checks" in response.content
+    assert b"Tyres checked" in response.content and b"Done" in response.content
+    assert b"Lights checked" in response.content and b"Not applicable" in response.content
+    assert b"Not checked" in response.content
+    assert b"not a formal inspection" in response.content
+    assert b"Recheck tyre pressure at next visit." in response.content
 
 
 def test_job_card_updates_booking_status_and_can_open_invoice_on_completion(client, job_card):

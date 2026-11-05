@@ -57,9 +57,21 @@ class JobCardListView(JobCardQuerysetMixin, RoleRequiredMixin, ListView):
     context_object_name = "job_cards"
     paginate_by = 20
 
+    def get_queryset(self):
+        job_cards = super().get_queryset()
+        if self.request.GET.get("overdue") == "1":
+            job_cards = job_cards.filter(
+                booking__booking_date__lt=timezone.localdate(),
+                booking__status__in=("CONFIRMED", "IN_PROGRESS"),
+            )
+        return job_cards
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["page_title"] = "All job cards" if self.request.user.is_admin_role else "My job cards"
+        if self.request.GET.get("overdue") == "1":
+            context["page_title"] = "Overdue job cards"
+        else:
+            context["page_title"] = "All job cards" if self.request.user.is_admin_role else "My job cards"
         return context
 
 
@@ -416,6 +428,19 @@ class InvoiceView(InvoiceAccessMixin, DetailView):
     model = JobCard
     template_name = "jobs/invoice.html"
     context_object_name = "job_card"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        checklist = self.object.checklist or {}
+        choice_labels = dict(JobCardForm.CHECKLIST_CHOICES)
+        context["checklist_rows"] = [
+            {
+                "label": label,
+                "status": choice_labels.get(checklist.get(key), "Not checked"),
+            }
+            for key, label in JobCardForm.CHECKLIST_ITEMS
+        ]
+        return context
 
 
 class InvoiceExportView(InvoiceAccessMixin, View):

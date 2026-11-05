@@ -40,6 +40,20 @@
             <dt class="col-sm-3">Vehicle</dt><dd class="col-sm-9">{{ job_card.booking.vehicle|default:"-" }}</dd>
             <dt class="col-sm-3">Work completed</dt><dd class="col-sm-9">{{ job_card.work_done|default:"-"|linebreaksbr }}</dd>
         </dl>
+        <section class="mb-4" aria-labelledby="checklist-heading">
+            <h2 class="h6" id="checklist-heading">Recorded handover checks</h2>
+            <p class="small text-body-secondary">Workshop-recorded checks only; this is not a formal inspection or certification.</p>
+            <dl class="row mb-0">
+                {% for row in checklist_rows %}
+                <dt class="col-sm-6">{{ row.label }}</dt>
+                <dd class="col-sm-6">{{ row.status }}</dd>
+                {% endfor %}
+                {% if job_card.checklist_notes %}
+                <dt class="col-sm-3">Follow-up notes</dt>
+                <dd class="col-sm-9">{{ job_card.checklist_notes|linebreaksbr }}</dd>
+                {% endif %}
+            </dl>
+        </section>
         <div class="table-responsive">
             <table class="table">
                 <thead><tr><th>Description</th><th class="text-end">Qty</th><th class="text-end">Unit price</th><th class="text-end">Total</th></tr></thead>

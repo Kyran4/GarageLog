@@ -86,6 +86,7 @@ Then run `python manage.py seed_demo_stock` to import the illustrative demo part
 | `/accounts/profile/` | View and edit your own profile |
 | `/accounts/password-reset/` | Reset a forgotten password |
 | `/dashboard/` | Redirects to your role's dashboard |
+| `/updates/` | Review in-app booking status updates and mark them as read |
 
 New signups are always active customers. An admin can change a user's role and assign their workshop in Django admin (`/admin/`, "Users"). Mechanics must be assigned to a workshop. To restrict a view to a role, use the mixins in `accounts/mixins.py`:
 
@@ -97,6 +98,8 @@ class MyJobsView(MechanicRequiredMixin, ListView):
 ```
 
 Logged-out users are sent to the login page; users with the wrong role get the 403 page. Create real mechanics and admins in the Django admin (`/admin/`) or with `createsuperuser` (which makes an Admin).
+
+Booking status changes create in-app updates for the customer. They appear in the navigation and on `/updates/`; this does not require an email sender.
 
 ## Vehicles and bookings
 
@@ -127,6 +130,13 @@ The slot rules live in `bookings/scheduling.py` and each workshop's hours are on
 - Past dates and times earlier today are refused.
 - Database constraints on `Booking` back these rules up, so a double booking is refused even if two requests arrive together.
 - A vehicle that has bookings can't be deleted, so its service history is never lost.
+- Customers can open a print-friendly service summary from completed entries in a vehicle's service history. The summary includes the invoice and any recorded job-card handover checks.
+
+The customer dashboard highlights WoF and registration dates that are due soon or expired. Vehicle owners can update dates from the vehicle page; missing dates are called out there so they can be added.
+
+### Dashboard attention
+
+The staff dashboards highlight pending bookings, overdue incomplete job cards, and low stock. Mechanics only see overdue job cards assigned to them and low-stock items at their own workshop; admins can follow low-stock links for each location.
 
 ## Workshops
 

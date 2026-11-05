@@ -216,6 +216,11 @@
                     </li>
                     {% endif %}
                     <li class="nav-item">
+                        <a class="nav-link{% if ns == 'notifications' %} active{% endif %}" {% if ns == 'notifications' %}aria-current="page" {% endif %} href="{% url 'notifications:list' %}">
+                            Updates{% if unread_notification_count %} <span class="badge text-bg-info">{{ unread_notification_count }} unread</span>{% endif %}
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link{% if url_name == 'profile' %} active{% endif %}" {% if url_name == 'profile' %}aria-current="page" {% endif %} href="{% url 'accounts:profile' %}">Profile</a>
                     </li>
                     <li class="nav-item">

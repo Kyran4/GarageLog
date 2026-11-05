@@ -4,6 +4,9 @@
 
 {% block content %}
 <h1 class="h3 mb-3">{{ page_title }}</h1>
+{% if request.GET.overdue == "1" %}
+<p class="text-body-secondary">Confirmed or in-progress jobs with booking dates before today.</p>
+{% endif %}
 
 {% if job_cards %}
 <div class="table-responsive">

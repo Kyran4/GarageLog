@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+
+{% block title %}Updates | GarageLog{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div>
+        <h1 class="h2 mb-1">Updates</h1>
+        <p class="text-body-secondary mb-0">{{ unread_count }} unread update{{ unread_count|pluralize }}</p>
+    </div>
+    {% if unread_count %}
+    <form method="post" action="{% url 'notifications:read_all' %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-outline-secondary">Mark all as read</button>
+    </form>
+    {% endif %}
+</div>
+
+{% if notifications %}
+<ul class="list-group">
+    {% for notification in notifications %}
+    <li class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2{% if not notification.read_at %} list-group-item-primary{% endif %}">
+        <span>
+            {{ notification.message }}
+            <small class="d-block text-body-secondary">{{ notification.created_at|date:"j M Y, g:i a" }}</small>
+        </span>
+        <span class="d-flex align-items-center gap-2">
+            {% if notification.booking_id and notification.booking.customer_id == user.pk %}
+            <a href="{% url 'booking_detail' notification.booking_id %}">View booking</a>
+            {% endif %}
+            {% if not notification.read_at %}
+            <form method="post" action="{% url 'notifications:read' notification.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-primary">Mark as read</button>
+            </form>
+            {% else %}
+            <span class="badge text-bg-secondary">Read</span>
+            {% endif %}
+        </span>
+    </li>
+    {% endfor %}
+</ul>
+{% if is_paginated %}
+<nav aria-label="Updates pages" class="mt-3">
+    <ul class="pagination">
+        {% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}">Previous</a></li>{% endif %}
+        <li class="page-item disabled"><span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span></li>
+        {% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}">Next</a></li>{% endif %}
+    </ul>
+</nav>
+{% endif %}
+{% else %}
+<p>You don't have any updates yet. Booking status changes will appear here.</p>
+{% endif %}
+{% endblock %}

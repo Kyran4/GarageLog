@@ -71,6 +71,7 @@ class JobCardForm(BootstrapFormMixin, forms.ModelForm):
         self.fields["work_done"].widget.attrs["rows"] = 5
         self.fields["checklist_notes"].widget.attrs["rows"] = 3
         self.fields["checklist_notes"].label = "Notes for attention or follow-up"
+        self.fields["checklist_notes"].help_text = "Shown on the customer's service summary."
         self.fields["checklist_notes"].required = False
 
     def save(self, commit=True):

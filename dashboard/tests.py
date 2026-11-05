@@ -250,6 +250,72 @@ def test_admin_dashboard_shows_pending_upcoming_and_vehicle_counts(client, admin
     assert '?status=PENDING' in response.content.decode()
 
 
+def test_admin_dashboard_attention_links_include_overdue_jobs_and_low_stock_by_workshop(
+    client, admin_user, mechanic, workshop, other_workshop, customer, vehicle,
+    make_booking, make_part, make_stock, open_day,
+):
+    overdue_booking = make_booking(
+        customer,
+        vehicle,
+        status='IN_PROGRESS',
+        mechanic=mechanic,
+        date=open_day,
+    )
+    overdue_booking.booking_date = timezone.localdate() - datetime.timedelta(days=1)
+    overdue_booking.save(update_fields=['booking_date'])
+    JobCard.objects.create(booking=overdue_booking, mechanic=mechanic)
+    part = make_part('LOW-DASH', universal=True)
+    make_stock(workshop, part, quantity=0)
+    make_stock(other_workshop, part, quantity=1, reorder_level=2)
+    client.force_login(admin_user)
+
+    response = client.get(reverse('admin_dashboard'))
+
+    assert response.context['overdue_job_count'] == 1
+    assert response.context['low_stock_count'] == 2
+    assert len(response.context['low_stock_rows']) == 2
+    body = response.content.decode()
+    assert reverse('jobcard_list') + '?overdue=1' in body
+    assert f"{reverse('inventory:stock')}?workshop={workshop.pk}&amp;low=1" in body
+    assert f"{reverse('inventory:stock')}?workshop={other_workshop.pk}&amp;low=1" in body
+
+
+def test_mechanic_attention_counts_only_their_assigned_overdue_jobs_and_workshop_bookings(
+    client, mechanic, other_workshop, customer, vehicle, make_user, make_booking, open_day,
+):
+    colleague = make_user('attention-colleague', User.Role.MECHANIC, workshop=mechanic.workshop)
+    overdue = make_booking(
+        customer, vehicle, status='IN_PROGRESS', mechanic=mechanic, date=open_day,
+    )
+    overdue.booking_date = timezone.localdate() - datetime.timedelta(days=1)
+    overdue.save(update_fields=['booking_date'])
+    JobCard.objects.create(booking=overdue, mechanic=mechanic)
+    colleague_booking = make_booking(
+        customer,
+        vehicle,
+        status='IN_PROGRESS',
+        mechanic=colleague,
+        workshop=mechanic.workshop,
+        time=datetime.time(11, 0),
+        date=overdue.booking_date,
+    )
+    JobCard.objects.create(booking=colleague_booking, mechanic=colleague)
+    make_booking(
+        customer,
+        vehicle,
+        status='PENDING',
+        workshop=other_workshop,
+        time=datetime.time(12, 0),
+        date=open_day,
+    )
+    client.force_login(mechanic)
+
+    response = client.get(reverse('mechanic_dashboard'))
+
+    assert response.context['overdue_job_count'] == 1
+    assert response.context['pending_count'] == 0
+
+
 def test_admin_dashboard_summarises_each_workshop(client, admin_user, make_user, workshop, other_workshop, customer, vehicle, make_booking):
     make_user('m1', User.Role.MECHANIC)
     make_user('m2', User.Role.MECHANIC)

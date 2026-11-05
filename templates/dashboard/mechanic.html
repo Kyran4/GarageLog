@@ -12,13 +12,36 @@
 <div class="alert alert-warning" role="status">You aren't assigned to a workshop yet. Ask an admin to assign you so you can see and make bookings.</div>
 {% endif %}
 
+{% if pending_count or overdue_job_count or low_stock_count %}
+<section aria-labelledby="attention-heading" class="mb-4">
+    <h2 class="h5" id="attention-heading">Needs attention</h2>
+    <ul class="list-group">
+        {% if pending_count %}
+        <li class="list-group-item d-flex justify-content-between gap-2">
+            <span>{{ pending_count }} booking{{ pending_count|pluralize }} awaiting confirmation at your workshop</span>
+            <a href="{{ pending_url }}">Review bookings</a>
+        </li>
+        {% endif %}
+        {% if overdue_job_count %}
+        <li class="list-group-item d-flex justify-content-between gap-2">
+            <span>{{ overdue_job_count }} overdue job card{{ overdue_job_count|pluralize }} assigned to you</span>
+            <a href="{{ overdue_jobs_url }}">Review job cards</a>
+        </li>
+        {% endif %}
+        {% if low_stock_count %}
+        <li class="list-group-item d-flex justify-content-between gap-2">
+            <span>Low or out of stock: {{ low_stock_count }} item{{ low_stock_count|pluralize }} at your workshop</span>
+            <a href="{{ low_stock_url }}">Review stock</a>
+        </li>
+        {% endif %}
+    </ul>
+</section>
+{% endif %}
+
 <div class="row g-3 mb-4">
     {% if workshop and not is_warehouse %}
     {% include 'dashboard/_link_card.html' with slug='upcoming' title='Upcoming bookings at your workshop' count=upcoming_count text='Active bookings that have not happened yet.' url=bookings_url link_text='View bookings' %}
     {% include 'dashboard/_link_card.html' with slug='assigned' title='Assigned to you' count=assigned_count text='Upcoming bookings where you are the mechanic.' url=bookings_url link_text='View bookings' %}
-    {% endif %}
-    {% if workshop %}
-    {% include 'dashboard/_link_card.html' with slug='lowstock' title='Low or out of stock' count=low_stock_count text='Parts at or below their reorder level.' url=low_stock_url link_text='View low stock' %}
     {% endif %}
     {% include 'dashboard/_action_card.html' with slug='parts' title='Find parts' text='Search the parts library by plate, or by make and model, and see what your workshop has in stock.' url=parts_url link_text='Search parts' %}
     {% if not is_warehouse %}

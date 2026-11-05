@@ -15,6 +15,18 @@
     </div>
 </div>
 
+{% if show_maintenance_reminder %}
+<section class="alert {% if vehicle.wof_status == 'expired' or vehicle.rego_status == 'expired' %}alert-danger{% elif vehicle.wof_status == 'soon' or vehicle.rego_status == 'soon' %}alert-warning{% else %}alert-info{% endif %}" aria-labelledby="maintenance-reminder-heading">
+    <h2 class="h5" id="maintenance-reminder-heading">Maintenance reminders</h2>
+    <p class="mb-2">Keep these expiry dates up to date to see reminders on your dashboard.</p>
+    <ul class="mb-2">
+        <li>WoF: {% include 'includes/expiry.html' with date=vehicle.wof_expiry status=vehicle.wof_status %}</li>
+        <li>Registration: {% include 'includes/expiry.html' with date=vehicle.rego_expiry status=vehicle.rego_status %}</li>
+    </ul>
+    <a class="alert-link" href="{% url 'vehicles:edit' vehicle.pk %}">Update expiry dates</a>
+</section>
+{% endif %}
+
 <dl class="row">
     <dt class="col-sm-3">Vehicle</dt>
     <dd class="col-sm-9">{{ vehicle.year }} {{ vehicle.make }} {{ vehicle.model }}</dd>
@@ -50,6 +62,9 @@
             <span>
                 {% include 'includes/booking_status.html' with status=booking.status label=booking.get_status_display %}
                 {% if booking.can_open %}<a class="ms-2" href="{% url 'booking_detail' booking.pk %}">View<span class="visually-hidden"> booking #{{ booking.pk }}</span></a>{% endif %}
+                {% if booking.status == 'COMPLETED' and booking.job_card and booking.customer_id == user.pk %}
+                <a class="ms-2" href="{% url 'jobcard_invoice' booking.job_card.pk %}">Service summary<span class="visually-hidden"> for booking #{{ booking.pk }}</span></a>
+                {% endif %}
             </span>
         </li>
         {% endfor %}
