@@ -11,6 +11,23 @@ from .models import JobCard, JobPart, SupplierOrder
 
 
 class JobCardForm(BootstrapFormMixin, forms.ModelForm):
+    CHECKLIST_ITEMS = (
+        ("tyres", "Tyres checked"),
+        ("lights", "Lights checked"),
+        ("leaks", "Visible leaks checked"),
+        ("warning_lights", "Dashboard warning lights checked"),
+        ("fluids", "Relevant fluid levels checked"),
+        ("requested_work", "Requested work completed"),
+        ("parts_recorded", "Parts fitted recorded on the job card"),
+        ("equipment_removed", "Tools and equipment removed from the vehicle"),
+        ("handover_check", "Final vehicle check completed"),
+    )
+    CHECKLIST_CHOICES = (
+        ("", "Not checked"),
+        ("DONE", "Done"),
+        ("NOT_APPLICABLE", "Not applicable"),
+    )
+
     status = forms.ChoiceField(
         choices=Booking.STATUS_CHOICES,
         label="Service status",
@@ -23,20 +40,46 @@ class JobCardForm(BootstrapFormMixin, forms.ModelForm):
 
     class Meta:
         model = JobCard
-        fields = ["description", "work_done", "labor_charge"]
+        fields = ["description", "work_done", "checklist_notes", "labor_charge"]
 
-    field_order = ["status", "description", "work_done", "labor_charge", "open_invoice"]
+    field_order = ["status", "description", "work_done", "checklist_notes", "labor_charge", "open_invoice"]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        for key, label in self.CHECKLIST_ITEMS:
+            name = f"checklist_{key}"
+            self.fields[name] = forms.ChoiceField(
+                label=label,
+                choices=self.CHECKLIST_CHOICES,
+                required=False,
+                widget=forms.RadioSelect(attrs={"class": "form-check-input"}),
+            )
+            self.fields[name].initial = (self.instance.checklist or {}).get(key, "")
+        self.order_fields([
+            "status",
+            "description",
+            "work_done",
+            *(f"checklist_{key}" for key, _ in self.CHECKLIST_ITEMS),
+            "checklist_notes",
+            "labor_charge",
+            "open_invoice",
+        ])
         if self.instance and self.instance.pk:
             self.fields["status"].initial = self.instance.booking.status
         self.fields["labor_charge"].widget.attrs.update({"min": 0, "step": "0.01"})
         self.fields["description"].widget.attrs["rows"] = 3
         self.fields["work_done"].widget.attrs["rows"] = 5
+        self.fields["checklist_notes"].widget.attrs["rows"] = 3
+        self.fields["checklist_notes"].label = "Notes for attention or follow-up"
+        self.fields["checklist_notes"].required = False
 
     def save(self, commit=True):
         job_card = super().save(commit=False)
+        job_card.checklist = {
+            key: self.cleaned_data[f"checklist_{key}"]
+            for key, _ in self.CHECKLIST_ITEMS
+            if self.cleaned_data.get(f"checklist_{key}")
+        }
         if commit:
             with transaction.atomic():
                 job_card.save()

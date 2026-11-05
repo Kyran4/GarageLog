@@ -91,6 +91,10 @@ class JobCardDetailView(JobCardQuerysetMixin, RoleRequiredMixin, UpdateView):
         context = super().get_context_data(**kwargs)
         context["page_title"] = f"Job card #{self.object.pk}"
         context["part_form"] = JobPartForm(workshop=self.object.booking.workshop)
+        context["checklist_fields"] = [
+            context["form"][f"checklist_{key}"]
+            for key, _ in JobCardForm.CHECKLIST_ITEMS
+        ]
         return context
 
 

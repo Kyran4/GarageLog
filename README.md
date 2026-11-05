@@ -113,6 +113,10 @@ Logged-out users are sent to the login page; users with the wrong role get the 4
 
 Someone else's booking (or, for customers, vehicle) returns a 404, and a page your role can't use returns the 403 page.
 
+### Job cards and handover checklist
+
+Mechanics update job cards for their assigned work; admins can manage all job cards. The job-card form includes an optional, collapsible pre-handover checklist. Each check can be marked **Done** or **Not applicable**, or left **Not checked**, with an optional note for follow-up. The checklist is a workshop aid, not a formal inspection or certification.
+
 ### Booking rules
 
 The slot rules live in `bookings/scheduling.py` and each workshop's hours are on its record:

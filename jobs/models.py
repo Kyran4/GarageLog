@@ -25,6 +25,10 @@ class JobCard(models.Model):
 
     work_done = models.TextField(blank=True)
 
+    checklist = models.JSONField(default=dict, blank=True)
+
+    checklist_notes = models.TextField(blank=True)
+
     labor_charge = models.DecimalField(
         max_digits=9,
         decimal_places=2,

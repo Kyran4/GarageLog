@@ -97,6 +97,59 @@ def test_job_card_status_can_be_changed_without_automatically_opening_invoice(cl
     assert job_card.booking.status == "IN_PROGRESS"
 
 
+def test_job_card_checklist_is_optional_and_persists_responses(client, job_card):
+    client.force_login(job_card.mechanic)
+    detail_url = reverse("jobcard_detail", kwargs={"pk": job_card.pk})
+    page = client.get(detail_url)
+    assert page.status_code == 200
+    assert b"Optional pre-handover checklist" in page.content
+    assert b"not a formal inspection" in page.content
+
+    response = client.post(
+        detail_url,
+        {
+            "status": "IN_PROGRESS",
+            "description": job_card.description,
+            "work_done": job_card.work_done,
+            "labor_charge": "45.00",
+            "checklist_tyres": "DONE",
+            "checklist_lights": "NOT_APPLICABLE",
+            "checklist_leaks": "",
+            "checklist_warning_lights": "",
+            "checklist_fluids": "",
+            "checklist_requested_work": "",
+            "checklist_parts_recorded": "",
+            "checklist_equipment_removed": "",
+            "checklist_handover_check": "",
+            "checklist_notes": "Recheck tyre pressure at follow-up.",
+        },
+    )
+    assert response.status_code == 302
+    job_card.refresh_from_db()
+    assert job_card.checklist == {
+        "tyres": "DONE",
+        "lights": "NOT_APPLICABLE",
+    }
+    assert job_card.checklist_notes == "Recheck tyre pressure at follow-up."
+    page = client.get(detail_url)
+    assert page.context["form"]["checklist_tyres"].value() == "DONE"
+    assert page.context["form"]["checklist_lights"].value() == "NOT_APPLICABLE"
+
+    response = client.post(
+        detail_url,
+        {
+            "status": "IN_PROGRESS",
+            "description": "",
+            "work_done": "",
+            "labor_charge": "0.00",
+        },
+    )
+    assert response.status_code == 302
+    job_card.refresh_from_db()
+    assert job_card.checklist == {}
+    assert job_card.checklist_notes == ""
+
+
 def test_booking_screen_links_invoice_and_can_open_it_when_marking_service_complete(
     client, job_card, booking_data, vehicle
 ):

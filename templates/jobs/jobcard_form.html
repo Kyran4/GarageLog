@@ -123,6 +123,7 @@
     <form method="post" novalidate>
         {% csrf_token %}
         {% for field in form %}
+        {% if not field.name|slice:":10" == "checklist_" and field.name != "checklist_notes" %}
         <div class="mb-3">
             <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
             {{ field }}
@@ -130,7 +131,26 @@
             <div class="text-danger">{{ error }}</div>
             {% endfor %}
         </div>
+        {% endif %}
         {% endfor %}
+        <details class="card mb-3">
+            <summary class="card-header">Optional pre-handover checklist</summary>
+            <div class="card-body">
+                <p class="text-body-secondary">Mark each check as done or not applicable. Leave it as not checked if you did not perform it. This is a workshop aid, not a formal inspection.</p>
+                {% for field in checklist_fields %}
+                <fieldset class="mb-3">
+                    <legend class="form-label fs-6">{{ field.label }}</legend>
+                    {{ field }}
+                    {% for error in field.errors %}<div class="text-danger">{{ error }}</div>{% endfor %}
+                </fieldset>
+                {% endfor %}
+                <div class="mb-3">
+                    <label for="{{ form.checklist_notes.id_for_label }}" class="form-label">{{ form.checklist_notes.label }}</label>
+                    {{ form.checklist_notes }}
+                    {% for error in form.checklist_notes.errors %}<div class="text-danger">{{ error }}</div>{% endfor %}
+                </div>
+            </div>
+        </details>
         <button type="submit" class="btn btn-primary">Save changes</button>
         <a href="{% url 'booking_detail' job_card.booking.pk %}" class="btn btn-outline-secondary">Back to booking</a>
     </form>
