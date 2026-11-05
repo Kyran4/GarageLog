@@ -140,7 +140,12 @@
                 {% for field in checklist_fields %}
                 <fieldset class="mb-3">
                     <legend class="form-label fs-6">{{ field.label }}</legend>
-                    {{ field }}
+                    {% for radio in field %}
+                    <div class="form-check">
+                        {{ radio.tag }}
+                        <label class="form-check-label" for="{{ radio.id_for_label }}">{{ radio.choice_label }}</label>
+                    </div>
+                    {% endfor %}
                     {% for error in field.errors %}<div class="text-danger">{{ error }}</div>{% endfor %}
                 </fieldset>
                 {% endfor %}
