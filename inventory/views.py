@@ -1,16 +1,19 @@
 from django.contrib import messages
+from django.db import transaction
 from django.db.models import F, Q, Sum
 from django.http import QueryDict
-from django.shortcuts import redirect
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
-from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
+from django.utils import timezone
+from django.views import View
+from django.views.generic import CreateView, DeleteView, DetailView, FormView, ListView, UpdateView
 
 from accounts.mixins import RoleRequiredMixin
 from accounts.models import User
 from workshops.models import Workshop
 
-from .forms import PartSearchForm, StockItemForm
-from .models import Part, PartFitment, StockItem, parts_matching
+from .forms import PartSearchForm, StockItemForm, WarehouseStockTransferForm
+from .models import Part, PartFitment, StockItem, StockTransferRequest, parts_matching
 
 
 class StaffOnlyMixin(RoleRequiredMixin):
@@ -257,6 +260,130 @@ class StockCreateView(StaffOnlyMixin, WorkshopScopeMixin, CreateView):
         context['workshop'] = self.get_workshop()
         context['workshop_query'] = self.workshop_query()
         return context
+
+
+class WarehouseStockTransferView(RoleRequiredMixin, FormView):
+    allowed_roles = (User.Role.ADMIN,)
+    form_class = WarehouseStockTransferForm
+    template_name = 'inventory/stock_transfer_form.html'
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['warehouse'] = Workshop.get_warehouse()
+        return kwargs
+
+    def get_initial(self):
+        initial = super().get_initial()
+        workshop_id = self.request.GET.get('workshop', '')
+        if workshop_id.isdigit():
+            initial['workshop'] = workshop_id
+        part_id = self.request.GET.get('part', '')
+        if part_id.isdigit():
+            initial['part'] = part_id
+        return initial
+
+    def form_valid(self, form):
+        part = form.cleaned_data['part']
+        quantity = form.cleaned_data['quantity']
+        workshop = form.cleaned_data['workshop']
+        StockTransferRequest.objects.create(
+            workshop=workshop,
+            part=part,
+            quantity=quantity,
+            requested_by=self.request.user,
+        )
+        messages.success(
+            self.request,
+            f'Resupply request submitted for {quantity} × {part.name} to {workshop.name}. '
+            'Warehouse staff must approve it before stock is transferred.',
+        )
+        return redirect('supplier_order_list')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['warehouse'] = Workshop.get_warehouse()
+        context['has_available_parts'] = context['form'].fields['part'].queryset.exists()
+        return context
+
+
+class WarehouseWorkerRequiredMixin(RoleRequiredMixin):
+    allowed_roles = (User.Role.MECHANIC,)
+
+    def test_func(self):
+        user = self.request.user
+        return user.is_mechanic and user.workshop_id and user.workshop.is_parts_warehouse
+
+
+class StockTransferRequestDecisionView(WarehouseWorkerRequiredMixin, View):
+    def post(self, request, *args, **kwargs):
+        with transaction.atomic():
+            transfer_request = get_object_or_404(
+                StockTransferRequest.objects.select_for_update().select_related('part', 'workshop'),
+                pk=kwargs['pk'],
+            )
+            if transfer_request.status != StockTransferRequest.Status.PENDING:
+                messages.error(request, 'This resupply request has already been processed.')
+                return redirect('supplier_order_list')
+
+            warehouse = Workshop.get_warehouse()
+            warehouse_stock = (
+                StockItem.objects.select_for_update()
+                .filter(workshop=warehouse, part=transfer_request.part)
+                .first()
+                if warehouse else None
+            )
+            available = warehouse_stock.quantity if warehouse_stock else 0
+            if available < transfer_request.quantity:
+                messages.error(
+                    request,
+                    f'Cannot approve this request: only {available} × {transfer_request.part.name} '
+                    'remain in warehouse stock.',
+                )
+                return redirect('supplier_order_list')
+
+            deducted = StockItem.objects.filter(
+                pk=warehouse_stock.pk,
+                quantity__gte=transfer_request.quantity,
+            ).update(quantity=F('quantity') - transfer_request.quantity)
+            if not deducted:
+                messages.error(request, 'Warehouse stock changed. The request was not approved; please try again.')
+                return redirect('supplier_order_list')
+
+            workshop_stock, _ = StockItem.objects.get_or_create(
+                workshop=transfer_request.workshop,
+                part=transfer_request.part,
+                defaults={'quantity': 0},
+            )
+            StockItem.objects.filter(pk=workshop_stock.pk).update(
+                quantity=F('quantity') + transfer_request.quantity,
+            )
+            transfer_request.status = StockTransferRequest.Status.APPROVED
+            transfer_request.resolved_by = request.user
+            transfer_request.resolved_at = timezone.now()
+            transfer_request.save(update_fields=['status', 'resolved_by', 'resolved_at'])
+
+        messages.success(
+            request,
+            f'Approved and transferred {transfer_request.quantity} × {transfer_request.part.name} '
+            f'to {transfer_request.workshop.name}.',
+        )
+        return redirect('supplier_order_list')
+
+
+class StockTransferRequestRejectView(WarehouseWorkerRequiredMixin, View):
+    def post(self, request, pk):
+        with transaction.atomic():
+            transfer_request = get_object_or_404(
+                StockTransferRequest.objects.select_for_update(),
+                pk=pk,
+                status=StockTransferRequest.Status.PENDING,
+            )
+            transfer_request.status = StockTransferRequest.Status.REJECTED
+            transfer_request.resolved_by = request.user
+            transfer_request.resolved_at = timezone.now()
+            transfer_request.save(update_fields=['status', 'resolved_by', 'resolved_at'])
+        messages.success(request, 'The resupply request was rejected. No stock was transferred.')
+        return redirect('supplier_order_list')
 
 
 class StockUpdateView(StockQuerysetMixin, UpdateView):

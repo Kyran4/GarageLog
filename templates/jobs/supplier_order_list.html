@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 
-{% block title %}Warehouse orders - GarageLog{% endblock %}
+{% block title %}Warehouse orders and resupply requests - GarageLog{% endblock %}
 
 {% block content %}
 <div class="gl-banner d-flex flex-wrap justify-content-between align-items-center gap-3">
     <div>
-        <h1 class="h2 mb-1">Warehouse supplier orders</h1>
-        <p class="mb-0 text-body-secondary">Order catalogue parts for stock or fulfil job-card backorders.</p>
+        <h1 class="h2 mb-1">Warehouse orders</h1>
+        <p class="mb-0 text-body-secondary">Review workshop resupply requests, order catalogue parts for stock, or fulfil job-card backorders.</p>
     </div>
     <a class="btn btn-primary" href="{% url 'supplier_stock_order_create' %}">Order stock from supplier</a>
 </div>
@@ -39,6 +39,50 @@
     </div>
     {% else %}
     <p>No backorders are waiting to be ordered.</p>
+    {% endif %}
+</section>
+
+<section class="mb-5" aria-labelledby="stock-transfer-requests-heading">
+    <h2 class="h4" id="stock-transfer-requests-heading">Workshop resupply requests</h2>
+    {% if stock_transfer_requests %}
+    <div class="table-responsive">
+        <table class="table table-striped align-middle">
+            <thead>
+                <tr><th>Part</th><th>Workshop</th><th>Quantity</th><th>Requested by</th><th>Requested</th><th>Status</th><th></th></tr>
+            </thead>
+            <tbody>
+                {% for request in stock_transfer_requests %}
+                <tr>
+                    <th scope="row">{{ request.part.part_number }} — {{ request.part.name }}</th>
+                    <td>{{ request.workshop.name }}</td>
+                    <td>{{ request.quantity }}</td>
+                    <td>{{ request.requested_by.get_full_name|default:request.requested_by.username }}</td>
+                    <td>{{ request.requested_at|date:"j M Y H:i" }}</td>
+                    <td>
+                        {% if request.status == 'PENDING' %}<span class="badge text-bg-warning">Pending approval</span>
+                        {% elif request.status == 'APPROVED' %}<span class="badge text-bg-success">Approved</span>
+                        {% else %}<span class="badge text-bg-secondary">Rejected</span>{% endif %}
+                        {% if request.resolved_by %}<span class="d-block small text-body-secondary">by {{ request.resolved_by.get_full_name|default:request.resolved_by.username }}</span>{% endif %}
+                    </td>
+                    <td class="text-end text-nowrap">
+                        {% if can_process_stock_transfers and request.status == 'PENDING' %}
+                        <form method="post" action="{% url 'inventory:stock_transfer_approve' request.pk %}" class="d-inline">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm btn-primary">Approve</button>
+                        </form>
+                        <form method="post" action="{% url 'inventory:stock_transfer_reject' request.pk %}" class="d-inline">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm btn-outline-danger">Reject</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p>No workshop resupply requests.</p>
     {% endif %}
 </section>
 

@@ -9,6 +9,9 @@
     {% if workshop and not already_stocked %}
     <a class="btn btn-primary" href="{% url 'inventory:stock_add' %}?part={{ part.pk }}{% if workshop_query %}&amp;workshop={{ workshop.pk }}{% endif %}">Add to {{ workshop.name }} stock</a>
     {% endif %}
+    {% if user.is_admin_role and workshop and not workshop.is_parts_warehouse %}
+    <a class="btn btn-primary" href="{% url 'inventory:stock_transfer' %}?part={{ part.pk }}&amp;workshop={{ workshop.pk }}">Request resupply to {{ workshop.name }}</a>
+    {% endif %}
 </div>
 
 <dl class="row">
@@ -56,6 +59,9 @@
                         {% if item.can_edit %}
                         {% if item.workshop.is_parts_warehouse and user.is_mechanic and user.workshop_id == item.workshop_id %}
                         <a class="btn btn-sm btn-primary" href="{% url 'supplier_stock_order_create' %}?part={{ part.pk }}&amp;quantity=1">Order<span class="visually-hidden"> {{ part.part_number }} from supplier</span></a>
+                        {% endif %}
+                        {% if user.is_admin_role and not item.workshop.is_parts_warehouse %}
+                        <a class="btn btn-sm btn-primary" href="{% url 'inventory:stock_transfer' %}?part={{ part.pk }}&amp;workshop={{ item.workshop_id }}">Request resupply<span class="visually-hidden"> {{ part.part_number }} from warehouse</span></a>
                         {% endif %}
                         <a class="btn btn-sm btn-outline-primary" href="{% url 'inventory:stock_edit' item.pk %}">Edit<span class="visually-hidden"> stock at {{ item.workshop.name }}</span></a>
                         {% endif %}

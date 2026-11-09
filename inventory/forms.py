@@ -1,4 +1,5 @@
 from django import forms
+from django.db.models import F
 
 from accounts.forms import BootstrapFormMixin
 from vehicles.models import Vehicle, normalize_plate
@@ -72,3 +73,49 @@ class StockItemForm(BootstrapFormMixin, forms.ModelForm):
             self.fields['part'].queryset = Part.objects.filter(is_active=True).exclude(pk__in=already)
             self.fields['part'].empty_label = 'Select a part'
             self.fields['part'].label_from_instance = lambda part: f'{part.part_number} - {part.name}'
+
+
+class WarehouseStockTransferForm(BootstrapFormMixin, forms.Form):
+    workshop = StockLocationField(
+        queryset=Workshop.objects.none(),
+        label='Destination workshop',
+        empty_label='Select a workshop',
+    )
+    part = forms.ModelChoiceField(
+        queryset=Part.objects.none(),
+        label='Part',
+        empty_label='Select a part',
+    )
+    quantity = forms.IntegerField(min_value=1, initial=1)
+
+    def __init__(self, *args, warehouse=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.warehouse = warehouse
+        self.fields['workshop'].queryset = Workshop.objects.filter(
+            is_active=True,
+            is_parts_warehouse=False,
+        )
+        if warehouse is not None:
+            self.fields['part'].queryset = Part.objects.filter(
+                is_active=True,
+                stock_items__workshop=warehouse,
+                stock_items__quantity__gt=0,
+            ).annotate(
+                warehouse_quantity=F('stock_items__quantity'),
+            ).distinct()
+            self.fields['part'].label_from_instance = (
+                lambda part: f'{part.part_number} - {part.name} (available: {part.warehouse_quantity})'
+            )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        part = cleaned_data.get('part')
+        quantity = cleaned_data.get('quantity')
+        if part is not None and quantity is not None and self.warehouse is not None:
+            available = StockItem.objects.filter(
+                workshop=self.warehouse,
+                part=part,
+            ).values_list('quantity', flat=True).first() or 0
+            if quantity > available:
+                self.add_error('quantity', f'Only {available} are available in the parts warehouse.')
+        return cleaned_data

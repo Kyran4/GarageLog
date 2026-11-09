@@ -16,7 +16,7 @@ from django.views.generic import CreateView, DetailView, ListView, UpdateView
 from accounts.mixins import RoleRequiredMixin
 from accounts.models import User
 from bookings.models import Booking
-from inventory.models import Part, StockItem, parts_matching
+from inventory.models import Part, StockItem, StockTransferRequest, parts_matching
 from workshops.models import Workshop
 
 from .forms import JobCardForm, JobPartForm, SupplierOrderForm
@@ -261,6 +261,17 @@ class SupplierOrderListView(WarehouseStaffRequiredMixin, ListView):
             "job_card__booking__workshop",
             "job_card__mechanic",
             "part",
+        )
+        context["stock_transfer_requests"] = StockTransferRequest.objects.select_related(
+            "part",
+            "workshop",
+            "requested_by",
+            "resolved_by",
+        )
+        context["can_process_stock_transfers"] = (
+            self.request.user.is_mechanic
+            and self.request.user.workshop_id
+            and self.request.user.workshop.is_parts_warehouse
         )
         return context
 

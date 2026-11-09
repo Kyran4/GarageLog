@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Q
@@ -134,3 +135,39 @@ class StockItem(models.Model):
     @property
     def is_low(self):
         return self.quantity <= self.reorder_level
+
+
+class StockTransferRequest(models.Model):
+    class Status(models.TextChoices):
+        PENDING = 'PENDING', 'Pending'
+        APPROVED = 'APPROVED', 'Approved'
+        REJECTED = 'REJECTED', 'Rejected'
+
+    workshop = models.ForeignKey(
+        'workshops.Workshop',
+        on_delete=models.PROTECT,
+        related_name='stock_transfer_requests',
+    )
+    part = models.ForeignKey(Part, on_delete=models.PROTECT, related_name='stock_transfer_requests')
+    quantity = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='stock_transfer_requests',
+    )
+    resolved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='resolved_stock_transfer_requests',
+    )
+    requested_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-requested_at']
+
+    def __str__(self):
+        return f'{self.quantity} × {self.part.name} for {self.workshop.name} ({self.get_status_display()})'

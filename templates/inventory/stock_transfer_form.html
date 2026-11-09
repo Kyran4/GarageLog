@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+
+{% block title %}Request workshop resupply | GarageLog{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <h1 class="h2 mb-1">Request workshop resupply</h1>
+        {% if warehouse %}
+        <p class="text-body-secondary">Request stock from {{ warehouse.name }}. A warehouse worker must approve the request before any stock moves.</p>
+        {% else %}
+        <div class="alert alert-warning" role="status">There is no parts warehouse set up, so stock cannot be transferred.</div>
+        {% endif %}
+        {% if warehouse and not has_available_parts %}
+        <div class="alert alert-info" role="status">The parts warehouse has no stock available to transfer.</div>
+        {% endif %}
+        <form method="post" novalidate>
+            {% csrf_token %}
+            {% include 'includes/form.html' with form=form %}
+            {% if warehouse and has_available_parts %}
+            <button type="submit" class="btn btn-primary">Request resupply</button>
+            {% endif %}
+            <a class="btn btn-link" href="{% url 'inventory:stock' %}{% if request.GET.workshop %}?workshop={{ request.GET.workshop }}{% endif %}">Cancel</a>
+        </form>
+    </div>
+</div>
+{% endblock %}

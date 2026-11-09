@@ -8,7 +8,7 @@ from django.utils import timezone
 from accounts.models import User
 from jobs.models import SupplierOrder
 
-from .models import Part, StockItem
+from .models import Part, StockItem, StockTransferRequest
 
 pytestmark = pytest.mark.django_db
 
@@ -663,3 +663,229 @@ def test_the_admins_stock_picker_labels_the_warehouse(client, admin_user, worksh
 
     assert 'Parts Warehouse (parts warehouse)' in body
     assert 'Parts warehouse' in body
+
+
+def test_admins_can_open_the_warehouse_transfer_form_with_a_selected_workshop_and_part(
+        client, admin_user, other_workshop, warehouse, corolla_parts, make_stock):
+    part = corolla_parts['filter_old']
+    make_stock(warehouse, part, quantity=7)
+    client.force_login(admin_user)
+
+    response = client.get(
+        reverse('inventory:stock_transfer'),
+        {'workshop': other_workshop.pk, 'part': part.pk},
+    )
+
+    assert response.status_code == 200
+    assert str(response.context['form']['workshop'].value()) == str(other_workshop.pk)
+    assert str(response.context['form']['part'].value()) == str(part.pk)
+    assert 'available: 7' in response.content.decode()
+
+
+def test_admins_request_warehouse_stock_and_wait_for_warehouse_approval(
+        client, admin_user, warehouse_staff, workshop, warehouse, corolla_parts, make_stock):
+    part = corolla_parts['filter_old']
+    warehouse_item = make_stock(warehouse, part, quantity=8)
+    workshop_item = make_stock(workshop, part, quantity=2, reorder_level=4, bin_location='A2-1')
+    client.force_login(admin_user)
+
+    response = client.post(reverse('inventory:stock_transfer'), {
+        'workshop': workshop.pk,
+        'part': part.pk,
+        'quantity': 3,
+    })
+
+    assert response.status_code == 302
+    assert response.url == reverse('supplier_order_list')
+    warehouse_item.refresh_from_db()
+    workshop_item.refresh_from_db()
+    transfer_request = StockTransferRequest.objects.get()
+    assert transfer_request.status == StockTransferRequest.Status.PENDING
+    assert transfer_request.requested_by == admin_user
+    assert (warehouse_item.quantity, workshop_item.quantity) == (8, 2)
+
+    client.force_login(warehouse_staff)
+    response = client.post(reverse('inventory:stock_transfer_approve', kwargs={'pk': transfer_request.pk}))
+
+    assert response.status_code == 302
+    warehouse_item.refresh_from_db()
+    workshop_item.refresh_from_db()
+    transfer_request.refresh_from_db()
+    assert warehouse_item.quantity == 5
+    assert (workshop_item.quantity, workshop_item.reorder_level, workshop_item.bin_location) == (5, 4, 'A2-1')
+    assert transfer_request.status == StockTransferRequest.Status.APPROVED
+    assert transfer_request.resolved_by == warehouse_staff
+
+
+def test_approved_transfer_creates_workshop_stock_record_when_needed(
+        client, admin_user, warehouse_staff, workshop, warehouse, corolla_parts, make_stock):
+    part = corolla_parts['filter_old']
+    warehouse_item = make_stock(warehouse, part, quantity=3)
+    client.force_login(admin_user)
+
+    response = client.post(reverse('inventory:stock_transfer'), {
+        'workshop': workshop.pk,
+        'part': part.pk,
+        'quantity': 2,
+    })
+
+    assert response.status_code == 302
+    transfer_request = StockTransferRequest.objects.get()
+    assert transfer_request.status == StockTransferRequest.Status.PENDING
+    assert not StockItem.objects.filter(workshop=workshop, part=part).exists()
+
+    client.force_login(warehouse_staff)
+    client.post(reverse('inventory:stock_transfer_approve', kwargs={'pk': transfer_request.pk}))
+    warehouse_item.refresh_from_db()
+    workshop_item = StockItem.objects.get(workshop=workshop, part=part)
+    assert warehouse_item.quantity == 1
+    assert workshop_item.quantity == 2
+    assert workshop_item.unit_price is None
+
+
+def test_warehouse_worker_cannot_approve_when_warehouse_stock_is_no_longer_sufficient(
+        client, admin_user, warehouse_staff, workshop, warehouse, corolla_parts, make_stock):
+    part = corolla_parts['filter_old']
+    warehouse_item = make_stock(warehouse, part, quantity=2)
+    client.force_login(admin_user)
+
+    response = client.post(reverse('inventory:stock_transfer'), {
+        'workshop': workshop.pk,
+        'part': part.pk,
+        'quantity': 2,
+    })
+
+    assert response.status_code == 302
+    transfer_request = StockTransferRequest.objects.get()
+    warehouse_item.quantity = 1
+    warehouse_item.save(update_fields=['quantity'])
+
+    client.force_login(warehouse_staff)
+    response = client.post(reverse('inventory:stock_transfer_approve', kwargs={'pk': transfer_request.pk}))
+
+    assert response.status_code == 302
+    warehouse_item.refresh_from_db()
+    transfer_request.refresh_from_db()
+    assert warehouse_item.quantity == 1
+    assert transfer_request.status == StockTransferRequest.Status.PENDING
+    assert not StockItem.objects.filter(workshop=workshop, part=part).exists()
+
+
+def test_admin_transfer_cannot_use_the_parts_warehouse_as_the_destination(
+        client, admin_user, warehouse, corolla_parts, make_stock):
+    part = corolla_parts['filter_old']
+    warehouse_item = make_stock(warehouse, part, quantity=2)
+    client.force_login(admin_user)
+
+    response = client.post(reverse('inventory:stock_transfer'), {
+        'workshop': warehouse.pk,
+        'part': part.pk,
+        'quantity': 1,
+    })
+
+    assert response.status_code == 200
+    assert 'workshop' in response.context['form'].errors
+    warehouse_item.refresh_from_db()
+    assert warehouse_item.quantity == 2
+    assert StockItem.objects.filter(workshop=warehouse, part=part).count() == 1
+
+
+def test_only_parts_warehouse_workers_can_approve_transfers(
+        client, mechanic, customer, admin_user, warehouse_staff, warehouse, corolla_parts, make_stock):
+    make_stock(warehouse, corolla_parts['filter_old'])
+    transfer_request = StockTransferRequest.objects.create(
+        workshop=mechanic.workshop,
+        part=corolla_parts['filter_old'],
+        quantity=1,
+        requested_by=admin_user,
+    )
+    url = reverse('inventory:stock_transfer_approve', kwargs={'pk': transfer_request.pk})
+
+    for user in (mechanic, customer, admin_user):
+        client.force_login(user)
+        assert client.get(url).status_code == 403
+        assert client.post(url).status_code == 403
+
+    client.force_login(warehouse_staff)
+    assert client.post(url).status_code == 302
+    transfer_request.refresh_from_db()
+    assert transfer_request.status == StockTransferRequest.Status.APPROVED
+
+
+def test_warehouse_worker_can_reject_a_resupply_request_without_moving_stock(
+        client, warehouse_staff, admin_user, workshop, warehouse, corolla_parts, make_stock):
+    part = corolla_parts['filter_old']
+    warehouse_item = make_stock(warehouse, part, quantity=3)
+    transfer_request = StockTransferRequest.objects.create(
+        workshop=workshop,
+        part=part,
+        quantity=2,
+        requested_by=admin_user,
+    )
+    client.force_login(warehouse_staff)
+
+    response = client.post(reverse('inventory:stock_transfer_reject', kwargs={'pk': transfer_request.pk}))
+
+    assert response.status_code == 302
+    transfer_request.refresh_from_db()
+    warehouse_item.refresh_from_db()
+    assert transfer_request.status == StockTransferRequest.Status.REJECTED
+    assert transfer_request.resolved_by == warehouse_staff
+    assert warehouse_item.quantity == 3
+    assert not StockItem.objects.filter(workshop=workshop, part=part).exists()
+
+
+def test_warehouse_orders_page_shows_requests_and_only_warehouse_workers_get_decision_buttons(
+        client, admin_user, warehouse_staff, workshop, corolla_parts):
+    transfer_request = StockTransferRequest.objects.create(
+        workshop=workshop,
+        part=corolla_parts['filter_old'],
+        quantity=2,
+        requested_by=admin_user,
+    )
+    url = reverse('supplier_order_list')
+
+    client.force_login(admin_user)
+    admin_body = client.get(url).content.decode()
+    assert 'Workshop resupply requests' in admin_body
+    assert 'Pending approval' in admin_body
+    assert reverse('inventory:stock_transfer_approve', kwargs={'pk': transfer_request.pk}) not in admin_body
+
+    client.force_login(warehouse_staff)
+    worker_body = client.get(url).content.decode()
+    assert reverse('inventory:stock_transfer_approve', kwargs={'pk': transfer_request.pk}) in worker_body
+    assert reverse('inventory:stock_transfer_reject', kwargs={'pk': transfer_request.pk}) in worker_body
+
+
+def test_a_resupply_request_cannot_be_approved_more_than_once(
+        client, warehouse_staff, admin_user, workshop, warehouse, corolla_parts, make_stock):
+    part = corolla_parts['filter_old']
+    warehouse_item = make_stock(warehouse, part, quantity=5)
+    transfer_request = StockTransferRequest.objects.create(
+        workshop=workshop,
+        part=part,
+        quantity=2,
+        requested_by=admin_user,
+    )
+    client.force_login(warehouse_staff)
+    url = reverse('inventory:stock_transfer_approve', kwargs={'pk': transfer_request.pk})
+
+    assert client.post(url).status_code == 302
+    assert client.post(url).status_code == 302
+
+    warehouse_item.refresh_from_db()
+    transfer_request.refresh_from_db()
+    assert warehouse_item.quantity == 3
+    assert StockItem.objects.get(workshop=workshop, part=part).quantity == 2
+    assert transfer_request.status == StockTransferRequest.Status.APPROVED
+
+
+def test_workshop_stock_navigation_exposes_direct_resupply_only_to_admins(
+        client, admin_user, mechanic, other_workshop):
+    client.force_login(admin_user)
+    admin_body = client.get(reverse('inventory:stock'), {'workshop': other_workshop.pk}).content.decode()
+    assert f'href="{reverse("inventory:stock_transfer")}?workshop={other_workshop.pk}"' in admin_body
+
+    client.force_login(mechanic)
+    mechanic_body = client.get(reverse('inventory:stock')).content.decode()
+    assert reverse('inventory:stock_transfer') not in mechanic_body
