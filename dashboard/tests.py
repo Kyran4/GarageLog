@@ -143,6 +143,37 @@ def test_navbar_changes_with_login_state(client, customer):
     assert 'Log out' in logged_in and 'Sign up' not in logged_in
 
 
+def test_staff_tools_are_grouped_in_the_more_dropdown(client, mechanic, admin_user):
+    for user in (mechanic, admin_user):
+        client.force_login(user)
+        body = client.get(reverse('home')).content.decode()
+
+        assert 'dropdown-toggle' in body and '>More</a>' in body
+        dropdown = body.split('<ul class="dropdown-menu"', 1)[1].split('</ul>', 1)[0]
+        assert 'class="dropdown-item"' in dropdown
+        assert f'href="{reverse("inventory:search")}"' in dropdown
+        assert f'href="{reverse("analytics")}"' in dropdown
+        assert 'Parts</a>' in dropdown and 'Analytics</a>' in dropdown
+
+    client.force_login(admin_user)
+    body = client.get(reverse('home')).content.decode()
+    dropdown = body.split('<ul class="dropdown-menu"', 1)[1].split('</ul>', 1)[0]
+    assert f'href="{reverse("supplier_order_list")}"' in dropdown
+    assert '>Warehouse orders</a>' in dropdown
+
+
+def test_more_dropdown_shows_when_a_staff_tool_is_active(client, mechanic):
+    client.force_login(mechanic)
+
+    body = client.get(reverse('inventory:search')).content.decode()
+
+    assert 'dropdown-toggle active' in body
+    dropdown = body.split('<ul class="dropdown-menu"', 1)[1].split('</ul>', 1)[0]
+    assert 'class="dropdown-item active"' in dropdown
+    assert 'aria-current="page"' in dropdown
+    assert f'href="{reverse("inventory:search")}"' in dropdown
+
+
 def test_custom_404_page(client, db):
     response = client.get('/this-page-does-not-exist/')
     assert response.status_code == 404

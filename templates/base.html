@@ -209,18 +209,21 @@
                     </li>
                     {% endif %}
                     {% if user.is_mechanic or user.is_admin_role %}
-                    <li class="nav-item">
-                        <a class="nav-link{% if ns == 'inventory' %} active{% endif %}" {% if ns == 'inventory' %}aria-current="page" {% endif %} href="{% url 'inventory:search' %}">Parts</a>
-                    </li>
-                    {% endif %}
-                    {% if user.is_mechanic or user.is_admin_role %}
-                    <li class="nav-item">
-                        <a class="nav-link{% if url_name == 'analytics' %} active{% endif %}" {% if url_name == 'analytics' %}aria-current="page" {% endif %} href="{% url 'analytics' %}">Analytics</a>
-                    </li>
-                    {% endif %}
-                    {% if user.is_admin_role or user.is_mechanic and user.workshop.is_parts_warehouse %}
-                    <li class="nav-item">
-                        <a class="nav-link{% if url_name == 'supplier_order_list' or url_name == 'supplier_order_create' %} active{% endif %}" href="{% url 'supplier_order_list' %}">Warehouse orders</a>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle{% if ns == 'inventory' or url_name == 'analytics' or url_name == 'supplier_order_list' or url_name == 'supplier_order_create' %} active{% endif %}" href="#" id="staff-tools-dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">More</a>
+                        <ul class="dropdown-menu" aria-labelledby="staff-tools-dropdown">
+                            <li>
+                                <a class="dropdown-item{% if ns == 'inventory' %} active{% endif %}" {% if ns == 'inventory' %}aria-current="page" {% endif %} href="{% url 'inventory:search' %}">Parts</a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item{% if url_name == 'analytics' %} active{% endif %}" {% if url_name == 'analytics' %}aria-current="page" {% endif %} href="{% url 'analytics' %}">Analytics</a>
+                            </li>
+                            {% if user.is_admin_role or user.is_mechanic and user.workshop.is_parts_warehouse %}
+                            <li>
+                                <a class="dropdown-item{% if url_name == 'supplier_order_list' or url_name == 'supplier_order_create' %} active{% endif %}" {% if url_name == 'supplier_order_list' or url_name == 'supplier_order_create' %}aria-current="page" {% endif %} href="{% url 'supplier_order_list' %}">Warehouse orders</a>
+                            </li>
+                            {% endif %}
+                        </ul>
                     </li>
                     {% endif %}
                     {% if user.is_customer or user.is_admin_role or user.is_mechanic and user.workshop_id and not user.workshop.is_parts_warehouse %}
