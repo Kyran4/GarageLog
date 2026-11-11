@@ -25,6 +25,11 @@
                 <button type="submit" class="btn btn-primary">Save changes</button>
             </form>
         </div>
+        <div class="gl-panel p-4 mb-4">
+            <h2 class="h4">Password</h2>
+            <p class="text-body-secondary">Request an email link to reset your password.</p>
+            <a class="btn btn-outline-primary" href="{% url 'accounts:password_reset' %}">Reset password</a>
+        </div>
         <div class="gl-panel p-4">
             <h2 class="h4">Appearance</h2>
             <p class="text-body-secondary">Choose light or dark mode. This is saved in this browser.</p>

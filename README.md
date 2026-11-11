@@ -38,7 +38,37 @@ Booking updates appear in the app. New customer accounts are active immediately,
 
 Logged-out users are sent to the login page; users with the wrong role are shown an access-denied page. Mechanics have access to their assigned workshop, while admins can work across all workshops.
 
-Booking status changes appear as in-app updates in the navigation and on `/updates/`.
+Booking status changes appear as in-app updates in the navigation and on `/updates/`,
+and are emailed to the customer.
+
+## Run locally with Gmail email
+
+1. Create and activate a virtual environment, then install the dependencies:
+
+   ```powershell
+   python -m venv .venv
+   .venv\Scripts\Activate.ps1
+   pip install -r requirements.txt
+   ```
+
+2. Copy `.env.example` to `.env` and set `EMAIL_HOST_USER`,
+   `DEFAULT_FROM_EMAIL`, and `EMAIL_HOST_PASSWORD` to your Gmail address and
+   Google App Password. The sender address must be the same Gmail account.
+3. In that Google account, enable 2-Step Verification and create an App Password.
+   Use the App Password in `.env`, not your normal Google password. If App
+   Passwords aren't available for the account, use the Gmail API OAuth settings
+   in `.env.example` instead.
+4. Start the local app:
+
+   ```powershell
+   python manage.py migrate
+   python manage.py runserver
+   ```
+
+   Open `http://127.0.0.1:8000/`. Emails triggered by the app, such as password
+   reset messages and booking status notifications, will be sent through Gmail.
+   `SITE_URL` controls the link in notification emails; it defaults to the local
+   server address. Keep `.env` private; it is excluded from version control.
 
 ## Vehicles and bookings
 

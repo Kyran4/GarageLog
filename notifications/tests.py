@@ -1,4 +1,5 @@
 import pytest
+from django.core import mail
 from django.urls import reverse
 
 from .models import Notification
@@ -7,8 +8,10 @@ pytestmark = pytest.mark.django_db
 
 
 def test_booking_status_changes_create_in_app_updates_for_the_customer(customer, vehicle, make_booking):
+    mail.outbox.clear()
     booking = make_booking(customer, vehicle)
     assert Notification.objects.count() == 0
+    assert mail.outbox == []
 
     booking.status = "CONFIRMED"
     booking.save(update_fields=["status"])
@@ -17,14 +20,20 @@ def test_booking_status_changes_create_in_app_updates_for_the_customer(customer,
     assert update.recipient == customer
     assert update.booking == booking
     assert update.message == f"Booking #{booking.pk} is now Confirmed."
+    assert len(mail.outbox) == 1
+    assert mail.outbox[0].to == [customer.email]
+    assert update.message in mail.outbox[0].body
+    assert "http://127.0.0.1:8000/updates/" in mail.outbox[0].body
 
     booking.status = "IN_PROGRESS"
     booking.save(update_fields=["status"])
     assert Notification.objects.count() == 2
+    assert len(mail.outbox) == 2
 
     booking.notes = "No status change"
     booking.save(update_fields=["notes"])
     assert Notification.objects.count() == 2
+    assert len(mail.outbox) == 2
 
 
 def test_updates_page_is_login_required_and_shows_only_the_users_updates(

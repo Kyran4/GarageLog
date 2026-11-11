@@ -284,6 +284,7 @@ def test_profile_page_shows_current_details(client, customer):
     response = client.get(reverse('accounts:profile'))
     assert response.status_code == 200
     assert response.context['form'].instance == customer
+    assert reverse('accounts:password_reset') in response.content.decode()
 
 
 def test_user_can_update_profile(client, customer):
@@ -361,6 +362,15 @@ def test_profile_edits_only_affect_the_logged_in_user(client, customer, mechanic
 
 
 # ---------------------------------------------------------------- password reset
+
+
+def test_authenticated_password_reset_form_uses_profile_email(client, customer):
+    client.force_login(customer)
+
+    response = client.get(reverse('accounts:password_reset'))
+
+    assert response.status_code == 200
+    assert response.context['form']['email'].value() == customer.email
 
 
 def test_password_reset_sends_email_for_active_account(client, customer):

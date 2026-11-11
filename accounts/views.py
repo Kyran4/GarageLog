@@ -75,6 +75,12 @@ class UserPasswordResetView(auth_views.PasswordResetView):
     subject_template_name = 'accounts/email/password_reset_subject.txt'
     success_url = reverse_lazy('accounts:password_reset_done')
 
+    def get_initial(self):
+        initial = super().get_initial()
+        if self.request.user.is_authenticated:
+            initial['email'] = self.request.user.email
+        return initial
+
 
 class UserPasswordResetDoneView(auth_views.PasswordResetDoneView):
     template_name = 'accounts/password_reset_done.html'

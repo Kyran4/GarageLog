@@ -169,6 +169,12 @@ EMAIL_BACKEND = os.getenv(
     'EMAIL_BACKEND', 'accounts.console_email.ReadableConsoleEmailBackend'
 )
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'GarageLog <noreply@garagelog.local>')
+EMAIL_HOST = os.getenv('EMAIL_HOST', '')
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', '25'))
+EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'False').lower() in ('true', '1', 'yes', 'on')
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+SITE_URL = os.getenv('SITE_URL', 'http://127.0.0.1:8000')
 GMAIL_API_TIMEOUT = int(os.getenv('GMAIL_API_TIMEOUT', '10'))
 GMAIL_CLIENT_ID = os.getenv('GMAIL_CLIENT_ID', '')
 GMAIL_CLIENT_SECRET = os.getenv('GMAIL_CLIENT_SECRET', '')
