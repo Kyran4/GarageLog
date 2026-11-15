@@ -204,6 +204,36 @@ def test_customer_dashboard_counts_vehicles_and_upcoming_bookings(client, custom
     assert reverse('create_booking') in body
 
 
+def test_customer_dashboard_shows_only_recent_completed_service_history(
+        client, customer, mechanic, vehicle, make_user, make_vehicle, make_booking, open_day):
+    older = make_booking(
+        customer, vehicle, date=open_day, status='COMPLETED', service_type='Oil Change',
+    )
+    newer = make_booking(
+        customer, vehicle, date=open_day + datetime.timedelta(days=7),
+        status='COMPLETED', service_type='Brake Repair',
+    )
+    make_booking(customer, vehicle, date=open_day, time=datetime.time(11), status='CANCELLED')
+    other_customer = make_user('sam')
+    make_booking(
+        other_customer, make_vehicle(other_customer, plate='SAM111'),
+        status='COMPLETED', service_type='Private Service',
+    )
+    job_card = JobCard.objects.create(booking=older, mechanic=mechanic)
+    client.force_login(customer)
+
+    response = client.get(reverse('customer_dashboard'))
+
+    assert response.context['completed_service_count'] == 2
+    assert response.context['service_history'] == [newer, older]
+    body = response.content.decode()
+    assert 'Coming soon' not in body
+    assert body.index('Brake Repair') < body.index('Oil Change')
+    assert 'Private Service' not in body
+    assert reverse('vehicles:detail', kwargs={'pk': vehicle.pk}) in body
+    assert reverse('jobcard_invoice', kwargs={'pk': job_card.pk}) in body
+
+
 def test_customer_dashboard_ignores_bookings_that_already_happened(client, customer, vehicle, make_booking, open_day):
     make_booking(customer, vehicle)
     client.force_login(customer)
