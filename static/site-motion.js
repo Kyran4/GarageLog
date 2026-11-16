@@ -10,13 +10,13 @@ if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
 
         animate(
             heroItems,
-            { opacity: [0, 1], y: [16, 0] },
-            { duration: 0.55, delay: stagger(0.08), ease: "easeOut" }
+            { opacity: [0, 1], y: [22, 0], scale: [0.98, 1] },
+            { duration: 0.65, delay: stagger(0.1), ease: "easeOut" }
         );
     }
 
     inView(
-        ".gl-motion",
+        ".gl-motion, .gl-banner, .gl-panel, .gl-auth, main .gl-card",
         element => {
             animate(
                 element,

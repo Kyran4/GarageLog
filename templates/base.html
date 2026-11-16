@@ -57,10 +57,31 @@
             text-decoration: underline;
         }
 
+        .gl-navbar .nav-link {
+            transition: color 0.18s ease;
+        }
+
+        .gl-navbar .nav-link:hover {
+            color: #7cc8ff;
+        }
+
         .card,
         .list-group {
             border-radius: 0.9rem;
             box-shadow: 0 0.2rem 0.6rem rgba(0, 0, 0, 0.05);
+        }
+
+        .btn {
+            transition: transform 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease, border-color 0.18s ease;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0.35rem 0.8rem rgba(0, 120, 212, 0.18);
+        }
+
+        .btn:active {
+            transform: translateY(0);
         }
 
         .btn,
@@ -191,6 +212,18 @@
         main:focus {
             outline: none;
         }
+
+        @media (prefers-reduced-motion: reduce) {
+            .gl-navbar .nav-link,
+            .btn {
+                transition: none;
+            }
+
+            .btn:hover,
+            .btn:active {
+                transform: none;
+            }
+        }
     </style>
     <script>
         // Apply the colour theme chosen on the profile page (saved in this browser).
@@ -307,6 +340,7 @@
         var formErrors = document.getElementById('form-errors');
         if (formErrors) { formErrors.focus(); }
     </script>
+    <script type="module" src="{% static 'site-motion.js' %}"></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

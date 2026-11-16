@@ -34,12 +34,13 @@
     .gl-card {
         border: 1px solid var(--bs-border-color);
         border-radius: 0.9rem;
-        transition: transform 0.15s ease, box-shadow 0.15s ease;
+        transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
     }
 
         .gl-card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 0.6rem 1.2rem rgba(0, 0, 0, 0.08);
+            transform: translateY(-4px);
+            border-color: rgba(0, 120, 212, 0.3);
+            box-shadow: 0 0.7rem 1.4rem rgba(0, 0, 0, 0.1);
         }
 
     .gl-accent {
@@ -90,12 +91,23 @@
             color: #d1d5db;
         }
 
+    .gl-icon {
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+        .gl-card:hover .gl-icon {
+            transform: translateY(-3px) rotate(-4deg);
+            box-shadow: 0 0.4rem 0.8rem rgba(0, 120, 212, 0.25);
+        }
+
     @media (prefers-reduced-motion: reduce) {
-        .gl-card {
+        .gl-card,
+        .gl-icon {
             transition: none;
         }
 
-            .gl-card:hover {
+            .gl-card:hover,
+            .gl-card:hover .gl-icon {
                 transform: none;
             }
     }
