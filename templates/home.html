@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load static %}
 
 {% block title %}Home | GarageLog{% endblock %}
 
@@ -160,7 +161,7 @@
         <h1 class="display-4 fw-bold mb-0" id="home-title">Garage<span class="gl-wordmark-log">Log</span></h1>
     </div>
     <p class="lead mx-auto mb-4" style="max-width: 40rem;">Vehicle service history, bookings and WOF and registration reminders for independent workshops.</p>
-    <div class="d-flex flex-wrap justify-content-center gap-2 mb-5">
+    <div class="gl-hero-actions d-flex flex-wrap justify-content-center gap-2 mb-5">
         {% if user.is_authenticated %}
         <a class="btn btn-primary btn-lg" href="{% url 'dashboard' %}">Go to your dashboard</a>
         {% else %}
@@ -188,7 +189,7 @@
         <p class="text-body-secondary mb-0">Keep the paperwork in one place so you can get on with the cars.</p>
     </div>
     <div class="row g-4">
-        <div class="col-md-6 col-lg-4">
+        <div class="col-md-6 col-lg-4 gl-motion">
             <div class="card gl-card h-100">
                 <div class="card-body">
                     <span class="gl-icon" aria-hidden="true">
@@ -199,7 +200,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-6 col-lg-4">
+        <div class="col-md-6 col-lg-4 gl-motion">
             <div class="card gl-card h-100">
                 <div class="card-body">
                     <span class="gl-icon" aria-hidden="true">
@@ -210,7 +211,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-6 col-lg-4">
+        <div class="col-md-6 col-lg-4 gl-motion">
             <div class="card gl-card h-100">
                 <div class="card-body">
                     <span class="gl-icon" aria-hidden="true">
@@ -221,7 +222,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-6 col-lg-4">
+        <div class="col-md-6 col-lg-4 gl-motion">
             <div class="card gl-card h-100">
                 <div class="card-body">
                     <span class="gl-icon" aria-hidden="true">
@@ -232,7 +233,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-6 col-lg-4">
+        <div class="col-md-6 col-lg-4 gl-motion">
             <div class="card gl-card h-100">
                 <div class="card-body">
                     <span class="gl-icon" aria-hidden="true">
@@ -243,7 +244,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-6 col-lg-4">
+        <div class="col-md-6 col-lg-4 gl-motion">
             <div class="card gl-card h-100">
                 <div class="card-body">
                     <span class="gl-icon" aria-hidden="true">
@@ -263,17 +264,17 @@
         <h2 class="h1 fw-bold" id="steps-title">How it works</h2>
     </div>
     <div class="row g-4 text-center">
-        <div class="col-md-4">
+        <div class="col-md-4 gl-motion">
             <span class="gl-step-number" aria-hidden="true">1</span>
             <h3 class="h5">Add your vehicle</h3>
             <p class="text-body-secondary mb-0">Create an account and enter your number plate, vehicle details and WOF and rego dates.</p>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-4 gl-motion">
             <span class="gl-step-number" aria-hidden="true">2</span>
             <h3 class="h5">Book a service</h3>
             <p class="text-body-secondary mb-0">Choose a workshop and a time that suits you. The workshop confirms it.</p>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-4 gl-motion">
             <span class="gl-step-number" aria-hidden="true">3</span>
             <h3 class="h5">Keep the history</h3>
             <p class="text-body-secondary mb-0">After the job, the work is saved on your vehicle's record for next time.</p>
@@ -287,7 +288,7 @@
         <h2 class="h1 fw-bold" id="roles-title">Made for everyone in the workshop</h2>
     </div>
     <div class="row g-4">
-        <div class="col-md-4">
+        <div class="col-md-4 gl-motion">
             <div class="card gl-card h-100 border-top border-primary border-3">
                 <div class="card-body">
                     <h3 class="h5 card-title">Customers</h3>
@@ -295,7 +296,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-4 gl-motion">
             <div class="card gl-card h-100 border-top border-primary border-3">
                 <div class="card-body">
                     <h3 class="h5 card-title">Mechanics</h3>
@@ -303,7 +304,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-4 gl-motion">
             <div class="card gl-card h-100 border-top border-primary border-3">
                 <div class="card-body">
                     <h3 class="h5 card-title">Admins</h3>
@@ -315,7 +316,7 @@
 </section>
 
 {# ---------- Call to action ---------- #}
-<section class="gl-cta text-center px-3 px-md-5 py-5 mb-2" aria-labelledby="cta-title">
+<section class="gl-cta gl-motion text-center px-3 px-md-5 py-5 mb-2" aria-labelledby="cta-title">
     {% if user.is_authenticated %}
     <h2 class="h2 fw-bold" id="cta-title">Welcome back</h2>
     <p class="mb-4">Pick up where you left off.</p>
@@ -329,4 +330,8 @@
     </div>
     {% endif %}
 </section>
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="{% static 'home.js' %}"></script>
 {% endblock %}
