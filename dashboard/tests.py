@@ -162,6 +162,20 @@ def test_staff_tools_are_grouped_in_the_more_dropdown(client, mechanic, admin_us
     assert '>Warehouse orders</a>' in dropdown
 
 
+def test_admin_link_in_more_dropdown_is_only_shown_to_django_staff(client, admin_user, make_user):
+    client.force_login(admin_user)
+    body = client.get(reverse('home')).content.decode()
+    dropdown = body.split('<ul class="dropdown-menu"', 1)[1].split('</ul>', 1)[0]
+    assert '>Admin</a>' not in dropdown
+
+    staff_admin = make_user('staffadmin', User.Role.ADMIN, is_staff=True)
+    client.force_login(staff_admin)
+    body = client.get(reverse('home')).content.decode()
+    dropdown = body.split('<ul class="dropdown-menu"', 1)[1].split('</ul>', 1)[0]
+    assert f'href="{reverse("admin:index")}"' in dropdown
+    assert '>Admin</a>' in dropdown
+
+
 def test_more_dropdown_shows_when_a_staff_tool_is_active(client, mechanic):
     client.force_login(mechanic)
 
