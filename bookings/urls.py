@@ -8,5 +8,10 @@ urlpatterns = [
     path("<int:pk>/", views.BookingDetailView.as_view(), name="booking_detail"),
     path("<int:pk>/edit/", views.BookingUpdateView.as_view(), name="booking_edit"),
     path("<int:pk>/cancel/", views.BookingCancelView.as_view(), name="booking_cancel"),
+    path("<int:pk>/quote/", views.BookingQuoteView.as_view(), name="booking_quote"),
+    path("<int:pk>/accept-quote/", views.BookingAcceptQuoteView.as_view(), name="booking_accept_quote"),
+    path("<int:pk>/decline-quote/", views.BookingDeclineQuoteView.as_view(), name="booking_decline_quote"),
+    # Short aliases make the quoting actions easy to link from integrations.
+    path("<int:pk>/submit-quote/", views.BookingQuoteView.as_view(), name="booking_submit_quote"),
     path("<int:pk>/delete/", views.BookingDeleteView.as_view(), name="booking_delete"),
 ]

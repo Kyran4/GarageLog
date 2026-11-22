@@ -291,3 +291,35 @@ class StaffBookingForm(BookingForm):
         if customer and vehicle and vehicle.owner_id != customer.pk:
             self.add_error("vehicle", "This vehicle belongs to a different customer.")
         return cleaned_data
+
+
+class QuoteForm(BootstrapFormMixin, forms.Form):
+    quote_amount = forms.DecimalField(
+        label="Quote amount",
+        min_value=0,
+        max_digits=10,
+        decimal_places=2,
+        widget=forms.NumberInput(attrs={"min": "0", "step": "0.01", "class": "form-control"}),
+    )
+    quote_notes = forms.CharField(
+        label="Quote details",
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 4, "placeholder": "Parts, labour and any exclusions"}),
+    )
+    mechanic = UserChoiceField(
+        queryset=User.objects.none(),
+        required=False,
+        empty_label="Choose a mechanic",
+    )
+
+    def __init__(self, *args, booking=None, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.booking = booking
+        if not user or not user.is_admin_role:
+            del self.fields["mechanic"]
+        elif booking:
+            self.fields["mechanic"].queryset = User.objects.filter(
+                role=User.Role.MECHANIC,
+                workshop=booking.workshop,
+                is_active=True,
+            ).order_by("username")

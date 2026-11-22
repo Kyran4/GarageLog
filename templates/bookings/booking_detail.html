@@ -8,6 +8,19 @@
     <h1 class="h2 mb-0">Booking #{{ booking.pk }}</h1>
     <div class="d-flex flex-wrap gap-2">
         {% if can_edit %}<a class="btn btn-outline-primary" href="{% url 'booking_edit' booking.pk %}">Edit</a>{% endif %}
+        {% if can_quote %}<a class="btn btn-primary" href="{% url 'booking_quote' booking.pk %}">Accept &amp; quote</a>{% endif %}
+        {% if can_accept_quote %}
+        <form method="post" action="{% url 'booking_accept_quote' booking.pk %}" class="d-inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-success">Accept quote</button>
+        </form>
+        {% endif %}
+        {% if can_decline_quote %}
+        <form method="post" action="{% url 'booking_decline_quote' booking.pk %}" class="d-inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline-danger">Decline quote</button>
+        </form>
+        {% endif %}
         {% if can_cancel %}<a class="btn btn-outline-warning" href="{% url 'booking_cancel' booking.pk %}">Cancel booking</a>{% endif %}
         {% if is_admin %}<a class="btn btn-outline-danger" href="{% url 'booking_delete' booking.pk %}">Delete</a>{% endif %}
         {% if user.is_admin_role or user.is_mechanic %}
@@ -54,5 +67,13 @@
     <dd class="col-sm-9">{% if booking.mechanic %}{{ booking.mechanic.get_full_name|default:booking.mechanic.username }}{% else %}<span class="text-body-secondary">Not assigned yet</span>{% endif %}</dd>
     <dt class="col-sm-3">Notes</dt>
     <dd class="col-sm-9">{{ booking.notes|default:"-"|linebreaksbr }}</dd>
+    {% if booking.quote_amount %}
+    <dt class="col-sm-3">Quote</dt>
+    <dd class="col-sm-9">
+        <strong>${{ booking.quote_amount|floatformat:2 }}</strong>
+        {% if booking.quote_notes %}<br>{{ booking.quote_notes|linebreaksbr }}{% endif %}
+        {% if booking.quoted_at %}<br><span class="text-body-secondary">Quoted {{ booking.quoted_at|date:"j M Y, g:i a" }}</span>{% endif %}
+    </dd>
+    {% endif %}
 </dl>
 {% endblock %}

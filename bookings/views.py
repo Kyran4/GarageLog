@@ -17,7 +17,7 @@ from vehicles.models import Vehicle
 from workshops.models import Workshop
 
 from . import scheduling
-from .forms import BookingForm, StaffBookingForm
+from .forms import BookingForm, QuoteForm, StaffBookingForm
 from .models import Booking
 
 
@@ -169,6 +169,12 @@ class BookingDetailView(BookingQuerysetMixin, DetailView):
         user = self.request.user
         context["can_edit"] = self.object.can_be_edited_by(user)
         context["can_cancel"] = self.object.can_be_cancelled_by(user)
+        context["can_quote"] = self.object.can_be_quoted_by(user)
+        context["can_accept_quote"] = self.object.can_accept_quote_by(user)
+        context["can_decline_quote"] = (
+            self.object.status == "QUOTED"
+            and self.object.customer_id == user.pk
+        )
         context["is_admin"] = user.is_admin_role
         return context
 
@@ -297,6 +303,101 @@ class BookingUpdateView(BookingSaveMixin, BookingQuerysetMixin, UpdateView):
         context = super().get_context_data(**kwargs)
         context["page_title"] = "Edit booking"
         return context
+
+
+class BookingQuoteView(BookingQuerysetMixin, DetailView):
+    """Mechanics accept a pending booking and attach a quote."""
+
+    template_name = "bookings/booking_quote.html"
+    context_object_name = "booking"
+
+    def get_object(self, queryset=None):
+        booking = super().get_object()
+        if not booking.can_be_quoted_by(self.request.user):
+            raise PermissionDenied
+        return booking
+
+    def get(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        form = QuoteForm(booking=self.object, user=request.user)
+        return self.render_to_response(self.get_context_data(form=form))
+
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        form = QuoteForm(request.POST, booking=self.object, user=request.user)
+        if not form.is_valid():
+            return self.render_to_response(self.get_context_data(form=form))
+
+        mechanic = request.user
+        if request.user.is_admin_role:
+            mechanic = form.cleaned_data.get("mechanic")
+            if mechanic is None:
+                form.add_error("mechanic", "Choose a mechanic to assign this quote.")
+                return self.render_to_response(self.get_context_data(form=form))
+
+        if self.object._clashes(mechanic_id=mechanic.pk):
+            form.add_error("mechanic", "That mechanic is already booked at this time.")
+            return self.render_to_response(self.get_context_data(form=form))
+
+        self.object.mechanic = mechanic
+        self.object.quote_amount = form.cleaned_data["quote_amount"]
+        self.object.quote_notes = form.cleaned_data["quote_notes"].strip()
+        self.object.quoted_at = timezone.now()
+        self.object.status = "QUOTED"
+        self.object.save(update_fields=[
+            "mechanic", "quote_amount", "quote_notes", "quoted_at", "status",
+        ])
+        messages.success(request, "The quote has been sent to the customer.")
+        return redirect("booking_detail", pk=self.object.pk)
+
+
+class BookingAcceptQuoteView(BookingQuerysetMixin, DetailView):
+    """Customer accepts the mechanic's quote and finalizes the booking."""
+
+    def get_object(self, queryset=None):
+        booking = super().get_object()
+        if not booking.can_accept_quote_by(self.request.user):
+            raise PermissionDenied
+        return booking
+
+    def post(self, request, *args, **kwargs):
+        booking = self.get_object()
+        try:
+            with transaction.atomic():
+                scheduling.lock_capacity(booking.workshop)
+                if booking._clashes(vehicle_id=booking.vehicle_id) or (
+                    booking.mechanic_id and booking._clashes(mechanic_id=booking.mechanic_id)
+                ):
+                    raise IntegrityError
+                booking.status = "CONFIRMED"
+                booking.quote_accepted_at = timezone.now()
+                booking.save(update_fields=["status", "quote_accepted_at"])
+        except IntegrityError:
+            messages.error(request, "The vehicle or mechanic is no longer available at that time.")
+            return redirect("booking_detail", pk=booking.pk)
+
+        messages.success(request, "Quote accepted. Your booking is confirmed.")
+        return redirect("booking_detail", pk=booking.pk)
+
+
+class BookingDeclineQuoteView(BookingQuerysetMixin, DetailView):
+    """Customer declines a quote and cancels the booking."""
+
+    def get_object(self, queryset=None):
+        booking = super().get_object()
+        if not (
+            booking.status == "QUOTED"
+            and booking.customer_id == self.request.user.pk
+        ):
+            raise PermissionDenied
+        return booking
+
+    def post(self, request, *args, **kwargs):
+        booking = self.get_object()
+        booking.status = "CANCELLED"
+        booking.save(update_fields=["status"])
+        messages.success(request, "The quote was declined and the booking has been cancelled.")
+        return redirect("booking_detail", pk=booking.pk)
 
 
 class BookingCancelView(BookingQuerysetMixin, DetailView):
