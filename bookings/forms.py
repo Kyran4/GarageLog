@@ -6,6 +6,7 @@ from django.utils import timezone
 
 from accounts.forms import BootstrapFormMixin
 from accounts.models import User
+from inventory.models import StockItem, parts_matching
 from vehicles.models import Vehicle
 from workshops.models import Workshop
 
@@ -294,13 +295,6 @@ class StaffBookingForm(BookingForm):
 
 
 class QuoteForm(BootstrapFormMixin, forms.Form):
-    quote_amount = forms.DecimalField(
-        label="Quote amount",
-        min_value=0,
-        max_digits=10,
-        decimal_places=2,
-        widget=forms.NumberInput(attrs={"min": "0", "step": "0.01", "class": "form-control"}),
-    )
     quote_notes = forms.CharField(
         label="Quote details",
         required=False,
@@ -323,3 +317,94 @@ class QuoteForm(BootstrapFormMixin, forms.Form):
                 workshop=booking.workshop,
                 is_active=True,
             ).order_by("username")
+
+
+class QuotePartForm(BootstrapFormMixin, forms.Form):
+    stock_item = forms.ModelChoiceField(
+        queryset=StockItem.objects.none(),
+        label="Part",
+        empty_label="Select a stocked part",
+    )
+    quantity = forms.IntegerField(min_value=1)
+
+    def __init__(self, *args, workshop=None, vehicle=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if workshop is None:
+            return
+        stock = StockItem.objects.filter(
+            workshop=workshop,
+            quantity__gt=0,
+            part__is_active=True,
+        ).select_related("part")
+        if vehicle is not None:
+            matching_parts = parts_matching(vehicle.make, vehicle.model, vehicle.year)
+            stock = stock.filter(part__in=matching_parts)
+        self.fields["stock_item"].queryset = stock
+        self.fields["stock_item"].label_from_instance = (
+            lambda item: f"{item.part.part_number} - {item.part.name} "
+            f"(${item.price:.2f} each; {item.quantity} in stock)"
+        )
+
+
+class QuotePartFormSetBase(forms.BaseFormSet):
+    def __init__(self, *args, workshop=None, **kwargs):
+        self.workshop = workshop
+        super().__init__(*args, **kwargs)
+
+    def clean(self):
+        super().clean()
+        if any(self.errors):
+            return
+
+        quantities = {}
+        for form in self.forms:
+            data = getattr(form, "cleaned_data", {})
+            if not data or data.get("DELETE"):
+                continue
+            stock_item = data.get("stock_item")
+            if stock_item is not None:
+                quantities[stock_item.pk] = quantities.get(stock_item.pk, 0) + data["quantity"]
+
+        if not quantities:
+            return
+        available = dict(
+            StockItem.objects.filter(
+                pk__in=quantities,
+                workshop=self.workshop,
+            ).values_list("pk", "quantity")
+        )
+        for stock_item_id, requested in quantities.items():
+            if requested > available.get(stock_item_id, 0):
+                raise forms.ValidationError(
+                    "The requested quantity exceeds the workshop's current stock."
+                )
+
+
+QuotePartFormSet = forms.formset_factory(
+    QuotePartForm,
+    formset=QuotePartFormSetBase,
+    extra=1,
+    can_delete=True,
+    max_num=20,
+    validate_max=True,
+)
+
+
+class QuoteLabourForm(BootstrapFormMixin, forms.Form):
+    description = forms.CharField(max_length=150, label="Labour")
+    charge = forms.DecimalField(
+        min_value=0,
+        max_digits=8,
+        decimal_places=2,
+        label="Labour charge",
+        widget=forms.NumberInput(attrs={"min": "0", "step": "0.01"}),
+    )
+
+
+QuoteLabourFormSet = forms.formset_factory(
+    QuoteLabourForm,
+    extra=1,
+    can_delete=True,
+    max_num=20,
+    validate_max=True,
+)

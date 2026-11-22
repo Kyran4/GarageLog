@@ -15,7 +15,7 @@ from django.views.generic import CreateView, DetailView, ListView, UpdateView
 
 from accounts.mixins import RoleRequiredMixin
 from accounts.models import User
-from bookings.models import Booking
+from bookings.models import Booking, BookingQuoteLabour
 from inventory.models import Part, StockItem, StockTransferRequest, parts_matching
 from workshops.models import Workshop
 
@@ -545,6 +545,50 @@ class JobCardCreateView(RoleRequiredMixin, View):
 
     allowed_roles = (User.Role.MECHANIC, User.Role.ADMIN)
 
+    @staticmethod
+    def _transfer_accepted_quote(booking, job_card):
+        if not booking.quote_accepted_at:
+            return
+
+        for quote_part in booking.quote_parts.select_related("stock_item__part"):
+            stock_item = (
+                StockItem.objects.select_for_update()
+                .select_related("part")
+                .get(pk=quote_part.stock_item_id)
+            )
+            reserved = StockItem.objects.filter(
+                pk=stock_item.pk,
+                quantity__gte=quote_part.quantity,
+            ).update(quantity=F("quantity") - quote_part.quantity)
+
+            JobPart.objects.create(
+                job_card=job_card,
+                stock_item=stock_item if reserved else None,
+                part=stock_item.part,
+                name=stock_item.part.name,
+                source=(
+                    JobPart.Source.WORKSHOP
+                    if reserved and stock_item.workshop_id == booking.workshop_id
+                    else JobPart.Source.WAREHOUSE
+                ),
+                supply_status=(
+                    JobPart.SupplyStatus.READY
+                    if reserved else JobPart.SupplyStatus.BACKORDERED
+                ),
+                quantity=quote_part.quantity,
+                unit_cost=stock_item.unit_cost if reserved else None,
+                unit_price=quote_part.unit_price,
+                freight_charge=Decimal("0.00"),
+            )
+
+        labour_lines = list(BookingQuoteLabour.objects.filter(booking=booking))
+        if labour_lines:
+            job_card.labor_charge = sum(
+                (line.charge for line in labour_lines),
+                Decimal("0.00"),
+            )
+            job_card.save(update_fields=["labor_charge"])
+
     def post(self, request, booking_id):
         user = request.user
 
@@ -572,10 +616,13 @@ class JobCardCreateView(RoleRequiredMixin, View):
             messages.error(request, "Assign a mechanic to this booking first, then create the job card.")
             return back_to_booking
 
-        job_card, created = JobCard.objects.get_or_create(
-            booking=booking,
-            defaults={"mechanic": mechanic},
-        )
+        with transaction.atomic():
+            job_card, created = JobCard.objects.get_or_create(
+                booking=booking,
+                defaults={"mechanic": mechanic},
+            )
+            if created:
+                self._transfer_accepted_quote(booking, job_card)
         if not created:
             messages.info(request, "This booking already has a job card.")
             return back_to_booking

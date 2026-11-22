@@ -1,15 +1,40 @@
 import datetime
+from decimal import Decimal
 
 import pytest
 from django.urls import reverse
 
 from accounts.models import User
-
 from . import scheduling
-from .models import Booking
+from .models import (
+    Booking,
+    BookingQuoteLabour,
+    BookingQuotePart,
+    ServiceLabourRecommendation,
+)
 from .tests import frozen_now
 
 pytestmark = pytest.mark.django_db
+
+
+def quote_data(*, stock_item=None, quantity=1, labour_description="Labour", labour_charge="125.50"):
+    return {
+        "quote_notes": "",
+        "parts-TOTAL_FORMS": "1",
+        "parts-INITIAL_FORMS": "0",
+        "parts-MIN_NUM_FORMS": "0",
+        "parts-MAX_NUM_FORMS": "20",
+        "parts-0-stock_item": str(stock_item.pk) if stock_item else "",
+        "parts-0-quantity": str(quantity) if stock_item else "",
+        "parts-0-DELETE": "",
+        "labour-TOTAL_FORMS": "1",
+        "labour-INITIAL_FORMS": "0",
+        "labour-MIN_NUM_FORMS": "0",
+        "labour-MAX_NUM_FORMS": "20",
+        "labour-0-description": labour_description,
+        "labour-0-charge": labour_charge,
+        "labour-0-DELETE": "",
+    }
 
 
 # ---------------------------------------------------------------- mechanic quoting
@@ -21,15 +46,19 @@ def test_mechanic_accepts_booking_and_submits_quote(client, mechanic, customer, 
 
     response = client.post(
         reverse("booking_quote", kwargs={"pk": booking.pk}),
-        {"quote_amount": "125.50", "quote_notes": "Parts and labour included"},
+        quote_data(),
     )
 
-    assert response.status_code == 302
+    assert response.status_code == 302, (
+        response.context["form"].errors,
+        response.context["part_formset"].errors,
+        response.context["labour_formset"].errors,
+    )
     booking.refresh_from_db()
     assert booking.status == "QUOTED"
     assert booking.mechanic == mechanic
     assert str(booking.quote_amount) == "125.50"
-    assert booking.quote_notes == "Parts and labour included"
+    assert booking.quote_labour.get().line_total == Decimal("125.50")
     assert booking.quoted_at is not None
 
 
@@ -38,7 +67,7 @@ def test_customer_accepts_quote_and_finalizes_booking(client, mechanic, customer
     client.force_login(mechanic)
     client.post(
         reverse("booking_quote", kwargs={"pk": booking.pk}),
-        {"quote_amount": "125.50", "quote_notes": "Parts and labour included"},
+        quote_data(),
     )
 
     client.force_login(customer)
@@ -48,6 +77,124 @@ def test_customer_accepts_quote_and_finalizes_booking(client, mechanic, customer
     booking.refresh_from_db()
     assert booking.status == "CONFIRMED"
     assert booking.quote_accepted_at is not None
+
+
+def test_quote_uses_workshop_part_price_and_does_not_deduct_stock(
+        client, mechanic, customer, vehicle, workshop, make_part, make_stock, make_booking):
+    part = make_part(universal=True, price="12.50")
+    stock = make_stock(workshop, part, quantity=4, unit_price=Decimal("15.00"))
+    booking = make_booking(customer, vehicle)
+    client.force_login(mechanic)
+
+    response = client.post(
+        reverse("booking_quote", kwargs={"pk": booking.pk}),
+        quote_data(stock_item=stock, quantity=2, labour_charge="120.00"),
+    )
+
+    assert response.status_code == 302
+    booking.refresh_from_db()
+    assert booking.quote_amount == Decimal("150.00")
+    assert booking.quote_parts.get().unit_price == Decimal("15.00")
+    assert booking.quote_parts.get().line_total == Decimal("30.00")
+    assert booking.quote_labour.get().line_total == Decimal("120.00")
+    stock.refresh_from_db()
+    assert stock.quantity == 4
+    detail = client.get(reverse("booking_detail", kwargs={"pk": booking.pk}))
+    assert b"Test part" in detail.content
+    assert b"$150.00" in detail.content
+    assert BookingQuoteLabour.objects.filter(booking=booking, charge=Decimal("120.00")).exists()
+
+
+def test_quote_rejects_part_quantity_above_available_stock(
+        client, mechanic, customer, vehicle, workshop, make_part, make_stock, make_booking):
+    part = make_part(universal=True)
+    stock = make_stock(workshop, part, quantity=1)
+    booking = make_booking(customer, vehicle)
+    client.force_login(mechanic)
+
+    response = client.post(
+        reverse("booking_quote", kwargs={"pk": booking.pk}),
+        quote_data(stock_item=stock, quantity=2),
+    )
+
+    assert response.status_code == 200
+    booking.refresh_from_db()
+    assert booking.status == "PENDING"
+    assert not BookingQuotePart.objects.filter(booking=booking).exists()
+
+
+def test_quote_checks_combined_quantity_when_the_same_part_is_added_twice(
+        client, mechanic, customer, vehicle, workshop, make_part, make_stock, make_booking):
+    part = make_part(universal=True)
+    stock = make_stock(workshop, part, quantity=1)
+    booking = make_booking(customer, vehicle)
+    client.force_login(mechanic)
+    data = quote_data(stock_item=stock)
+    data.update({
+        "parts-TOTAL_FORMS": "2",
+        "parts-1-stock_item": str(stock.pk),
+        "parts-1-quantity": "1",
+        "parts-1-DELETE": "",
+    })
+
+    response = client.post(reverse("booking_quote", kwargs={"pk": booking.pk}), data)
+
+    assert response.status_code == 200
+    assert response.context["part_formset"].non_form_errors()
+    booking.refresh_from_db()
+    assert booking.status == "PENDING"
+    assert not BookingQuotePart.objects.filter(booking=booking).exists()
+
+
+def test_quote_part_choices_are_limited_to_matching_in_stock_workshop_parts(
+        client, mechanic, customer, vehicle, workshop, make_part, make_stock, make_booking):
+    matching = make_part("GOOD", universal=True)
+    wrong_fitment = make_part("WRONG", fits=[("Mazda", "3", 2000, 2025)])
+    out_of_stock = make_part("EMPTY", universal=True)
+    make_stock(workshop, matching)
+    make_stock(workshop, wrong_fitment)
+    make_stock(workshop, out_of_stock, quantity=0)
+    booking = make_booking(customer, vehicle)
+    client.force_login(mechanic)
+
+    response = client.get(reverse("booking_quote", kwargs={"pk": booking.pk}))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "GOOD - Test part" in content
+    assert "WRONG - Test part" not in content
+    assert "EMPTY - Test part" not in content
+
+
+def test_mechanic_sees_and_can_apply_service_labour_recommendation(
+        client, mechanic, customer, vehicle, make_booking):
+    booking = make_booking(customer, vehicle, service_type="Oil Change")
+    ServiceLabourRecommendation.objects.update_or_create(
+        service_type="Oil Change",
+        defaults={"recommended_charge": Decimal("60.00")},
+    )
+    client.force_login(mechanic)
+
+    response = client.get(reverse("booking_quote", kwargs={"pk": booking.pk}))
+
+    assert response.status_code == 200
+    assert response.context["labour_recommendation"].recommended_charge == Decimal("60.00")
+    assert b"NZ$60.00" in response.content
+    assert b"Use recommendation" in response.content
+
+
+def test_quote_requires_at_least_one_part_or_labour_line(
+        client, mechanic, customer, vehicle, make_booking):
+    booking = make_booking(customer, vehicle)
+    client.force_login(mechanic)
+    data = quote_data(labour_description="", labour_charge="")
+
+    response = client.post(reverse("booking_quote", kwargs={"pk": booking.pk}), data)
+
+    assert response.status_code == 200
+    assert "Add at least one part or labour item" in response.content.decode()
+    booking.refresh_from_db()
+    assert booking.status == "PENDING"
 
 
 def test_customer_cannot_accept_another_customers_quote(client, customer, make_user, make_vehicle, make_booking):

@@ -67,12 +67,38 @@
     <dd class="col-sm-9">{% if booking.mechanic %}{{ booking.mechanic.get_full_name|default:booking.mechanic.username }}{% else %}<span class="text-body-secondary">Not assigned yet</span>{% endif %}</dd>
     <dt class="col-sm-3">Notes</dt>
     <dd class="col-sm-9">{{ booking.notes|default:"-"|linebreaksbr }}</dd>
-    {% if booking.quote_amount %}
+    {% if booking.quoted_at %}
     <dt class="col-sm-3">Quote</dt>
     <dd class="col-sm-9">
         <strong>${{ booking.quote_amount|floatformat:2 }}</strong>
         {% if booking.quote_notes %}<br>{{ booking.quote_notes|linebreaksbr }}{% endif %}
         {% if booking.quoted_at %}<br><span class="text-body-secondary">Quoted {{ booking.quoted_at|date:"j M Y, g:i a" }}</span>{% endif %}
+        {% if booking.quote_parts.exists or booking.quote_labour.exists %}
+        <div class="table-responsive mt-3">
+            <table class="table table-sm align-middle">
+                <caption class="visually-hidden">Quote itemization</caption>
+                <thead><tr><th scope="col">Item</th><th scope="col">Type / quantity</th><th scope="col">Unit price</th><th scope="col">Total</th></tr></thead>
+                <tbody>
+                    {% for line in booking.quote_parts.all %}
+                    <tr>
+                        <td>{{ line.stock_item.part.name }} <span class="text-body-secondary">({{ line.stock_item.part.part_number }})</span></td>
+                        <td>{{ line.quantity }}</td>
+                        <td>${{ line.unit_price|floatformat:2 }}</td>
+                        <td>${{ line.line_total|floatformat:2 }}</td>
+                    </tr>
+                    {% endfor %}
+                    {% for line in booking.quote_labour.all %}
+                    <tr>
+                        <td>{{ line.description }}</td>
+                        <td>Labour</td>
+                        <td>&mdash;</td>
+                        <td>${{ line.line_total|floatformat:2 }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
     </dd>
     {% endif %}
 </dl>
