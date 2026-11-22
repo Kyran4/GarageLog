@@ -28,28 +28,41 @@
             {% for line_form in part_formset %}
             <div class="quote-line-row border rounded p-3 mb-2"{% if line_form.DELETE.value %} hidden{% endif %}>
                 {% for hidden in line_form.hidden_fields %}{{ hidden }}{% endfor %}
-                {% for field in line_form.visible_fields %}
-                    {% if field.name != "DELETE" %}
-                    {% if field.name == "stock_item" %}
-                    <div data-stock-fields{% if line_form.source.value != "STOCK" %} hidden{% endif %}>
-                    <div class="mb-3">
-                        <label for="part-search-{{ line_form.prefix }}" class="visually-hidden">Search parts by name or part number</label>
-                        <input id="part-search-{{ line_form.prefix }}" class="form-control mb-2" type="search"
-                               placeholder="Search parts by name or number" data-part-search>
+                <div class="row g-3">
+                    <div class="col-12 col-md-6">
+                        <label for="{{ line_form.source.id_for_label }}" class="form-label">{{ line_form.source.label }}</label>
+                        {{ line_form.source }}
+                        {% for error in line_form.source.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
                     </div>
-                    {% elif field.name == "manual_description" or field.name == "estimated_unit_price" %}
-                    <div data-manual-fields{% if line_form.source.value != "MANUAL" %} hidden{% endif %}>
-                    <div class="mb-3">
-                    {% else %}
-                    <div class="mb-3">
-                    {% endif %}
-                        <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}{% if field.field.required %}<span class="text-danger" aria-hidden="true"> *</span>{% endif %}</label>
-                        {{ field }}
-                        {% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                    <div class="col-12 col-md-6" data-stock-fields>
+                        <label for="part-search-{{ line_form.prefix }}" class="form-label">{{ line_form.stock_item.label }}</label>
+                        <div data-stock-picker>
+                            <input id="part-search-{{ line_form.prefix }}" class="form-control" type="search"
+                                   placeholder="Search and select a stocked part" autocomplete="off"
+                                   role="combobox" aria-autocomplete="list" aria-expanded="false"
+                                   aria-controls="part-options-{{ line_form.prefix }}" data-stock-search>
+                            <div id="part-options-{{ line_form.prefix }}" class="list-group overflow-auto"
+                                 style="max-height: 16rem;" role="listbox" hidden></div>
+                            <div class="d-none">{{ line_form.stock_item }}</div>
+                        </div>
+                        {% for error in line_form.stock_item.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
                     </div>
-                    {% if field.name == "stock_item" or field.name == "manual_description" or field.name == "estimated_unit_price" %}</div>{% endif %}
-                    {% endif %}
-                {% endfor %}
+                    <div class="col-12 col-md-6" data-manual-fields>
+                        <label for="{{ line_form.manual_description.id_for_label }}" class="form-label">{{ line_form.manual_description.label }}</label>
+                        {{ line_form.manual_description }}
+                        {% for error in line_form.manual_description.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                    </div>
+                    <div class="col-12 col-md-6" data-manual-fields>
+                        <label for="{{ line_form.estimated_unit_price.id_for_label }}" class="form-label">{{ line_form.estimated_unit_price.label }}</label>
+                        {{ line_form.estimated_unit_price }}
+                        {% for error in line_form.estimated_unit_price.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                    </div>
+                    <div class="col-12 col-md-3">
+                        <label for="{{ line_form.quantity.id_for_label }}" class="form-label">{{ line_form.quantity.label }}</label>
+                        {{ line_form.quantity }}
+                        {% for error in line_form.quantity.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                    </div>
+                </div>
                 <div class="d-none">{{ line_form.DELETE }}</div>
                 <button type="button" class="btn btn-sm btn-outline-danger" data-remove-quote-line>Remove part</button>
             </div>
@@ -59,27 +72,36 @@
         <template id="parts-empty-form">
             <div class="quote-line-row border rounded p-3 mb-2">
                 {% for hidden in part_formset.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
-                {% for field in part_formset.empty_form.visible_fields %}
-                    {% if field.name != "DELETE" %}
-                    {% if field.name == "stock_item" %}
-                    <div data-stock-fields hidden>
-                    <div class="mb-3">
-                        <label for="part-search-{{ part_formset.empty_form.prefix }}" class="visually-hidden">Search parts by name or part number</label>
-                        <input id="part-search-{{ part_formset.empty_form.prefix }}" class="form-control mb-2" type="search"
-                               placeholder="Search parts by name or number" data-part-search>
+                <div class="row g-3">
+                    <div class="col-12 col-md-6">
+                        <label for="{{ part_formset.empty_form.source.id_for_label }}" class="form-label">{{ part_formset.empty_form.source.label }}</label>
+                        {{ part_formset.empty_form.source }}
                     </div>
-                    {% elif field.name == "manual_description" or field.name == "estimated_unit_price" %}
-                    <div data-manual-fields hidden>
-                    <div class="mb-3">
-                    {% else %}
-                    <div class="mb-3">
-                    {% endif %}
-                        <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}{% if field.field.required %}<span class="text-danger" aria-hidden="true"> *</span>{% endif %}</label>
-                        {{ field }}
+                    <div class="col-12 col-md-6" data-stock-fields>
+                        <label for="part-search-{{ part_formset.empty_form.prefix }}" class="form-label">{{ part_formset.empty_form.stock_item.label }}</label>
+                        <div data-stock-picker>
+                            <input id="part-search-{{ part_formset.empty_form.prefix }}" class="form-control" type="search"
+                                   placeholder="Search and select a stocked part" autocomplete="off"
+                                   role="combobox" aria-autocomplete="list" aria-expanded="false"
+                                   aria-controls="part-options-{{ part_formset.empty_form.prefix }}" data-stock-search>
+                            <div id="part-options-{{ part_formset.empty_form.prefix }}" class="list-group overflow-auto"
+                                 style="max-height: 16rem;" role="listbox" hidden></div>
+                            <div class="d-none">{{ part_formset.empty_form.stock_item }}</div>
+                        </div>
                     </div>
-                    {% if field.name == "stock_item" or field.name == "manual_description" or field.name == "estimated_unit_price" %}</div>{% endif %}
-                    {% endif %}
-                {% endfor %}
+                    <div class="col-12 col-md-6" data-manual-fields>
+                        <label for="{{ part_formset.empty_form.manual_description.id_for_label }}" class="form-label">{{ part_formset.empty_form.manual_description.label }}</label>
+                        {{ part_formset.empty_form.manual_description }}
+                    </div>
+                    <div class="col-12 col-md-6" data-manual-fields>
+                        <label for="{{ part_formset.empty_form.estimated_unit_price.id_for_label }}" class="form-label">{{ part_formset.empty_form.estimated_unit_price.label }}</label>
+                        {{ part_formset.empty_form.estimated_unit_price }}
+                    </div>
+                    <div class="col-12 col-md-3">
+                        <label for="{{ part_formset.empty_form.quantity.id_for_label }}" class="form-label">{{ part_formset.empty_form.quantity.label }}</label>
+                        {{ part_formset.empty_form.quantity }}
+                    </div>
+                </div>
                 <div class="d-none">{{ part_formset.empty_form.DELETE }}</div>
                 <button type="button" class="btn btn-sm btn-outline-danger" data-remove-quote-line>Remove part</button>
             </div>
@@ -101,9 +123,9 @@
             {% for error in labour_formset.non_form_errors %}<div>{{ error }}</div>{% endfor %}
         </div>
         {% endif %}
-        <div id="labour-formset" data-quote-formset data-prefix="{{ labour_formset.prefix }}" data-max="20">
+        <div id="labour-formset">
             {% for line_form in labour_formset %}
-            <div class="quote-line-row border rounded p-3 mb-2"{% if line_form.DELETE.value %} hidden{% endif %}>
+            <div class="quote-line-row border rounded p-3 mb-2">
                 {% for hidden in line_form.hidden_fields %}{{ hidden }}{% endfor %}
                 {% for field in line_form.visible_fields %}
                     {% if field.name != "DELETE" %}
@@ -114,27 +136,9 @@
                     </div>
                     {% endif %}
                 {% endfor %}
-                <div class="d-none">{{ line_form.DELETE }}</div>
-                <button type="button" class="btn btn-sm btn-outline-danger" data-remove-quote-line>Remove labour</button>
             </div>
             {% endfor %}
         </div>
-        <button type="button" class="btn btn-sm btn-outline-primary mb-4" data-add-quote-line="labour">Add labour</button>
-        <template id="labour-empty-form">
-            <div class="quote-line-row border rounded p-3 mb-2">
-                {% for hidden in labour_formset.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
-                {% for field in labour_formset.empty_form.visible_fields %}
-                    {% if field.name != "DELETE" %}
-                    <div class="mb-3">
-                        <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}{% if field.field.required %}<span class="text-danger" aria-hidden="true"> *</span>{% endif %}</label>
-                        {{ field }}
-                    </div>
-                    {% endif %}
-                {% endfor %}
-                <div class="d-none">{{ labour_formset.empty_form.DELETE }}</div>
-                <button type="button" class="btn btn-sm btn-outline-danger" data-remove-quote-line>Remove labour</button>
-            </div>
-        </template>
         <div class="d-flex gap-2">
             <button type="submit" class="btn btn-primary">Send quote</button>
             <a class="btn btn-outline-secondary" href="{% url 'booking_detail' booking.pk %}">Cancel</a>
@@ -154,6 +158,7 @@
                 if (index >= Number(container.dataset.max)) return;
                 var row = template.innerHTML.replace(/__prefix__/g, index);
                 container.insertAdjacentHTML("beforeend", row);
+                setupStockPicker(container.lastElementChild.querySelector("[data-stock-picker]"));
                 total.value = index + 1;
                 addButton.disabled = Number(total.value) >= Number(container.dataset.max);
             });
@@ -169,25 +174,114 @@
                     addButton.disabled = Number(total.value) >= Number(container.dataset.max);
                 }
             });
-            container.addEventListener("change", function (event) {
-                if (!event.target.name || !event.target.name.endsWith("-source")) return;
-                var row = event.target.closest(".quote-line-row");
-                row.querySelector("[data-stock-fields]").hidden = event.target.value !== "STOCK";
-                row.querySelectorAll("[data-manual-fields]").forEach(function (fields) {
-                    fields.hidden = event.target.value !== "MANUAL";
-                });
-            });
-            container.addEventListener("input", function (event) {
-                if (!event.target.matches("[data-part-search]")) return;
-                var row = event.target.closest(".quote-line-row");
-                var select = row.querySelector('select[name$="-stock_item"]');
-                var query = event.target.value.trim().toLocaleLowerCase();
-                Array.from(select.options).forEach(function (option) {
-                    option.hidden = Boolean(option.value && option.value !== select.value
-                        && !option.textContent.toLocaleLowerCase().includes(query));
-                });
-            });
             addButton.disabled = Number(total.value) >= Number(container.dataset.max);
+        });
+
+        function setupStockPicker(picker) {
+            var input = picker.querySelector("[data-stock-search]");
+            var listbox = picker.querySelector('[role="listbox"]');
+            var select = picker.querySelector('select[name$="-stock_item"]');
+            var activeIndex = -1;
+
+            function closeList() {
+                listbox.hidden = true;
+                input.setAttribute("aria-expanded", "false");
+                input.removeAttribute("aria-activedescendant");
+                activeIndex = -1;
+            }
+
+            function renderOptions() {
+                var query = input.value.trim().toLocaleLowerCase();
+                var options = Array.from(select.options).filter(function (option) {
+                    return option.value && option.textContent.toLocaleLowerCase().includes(query);
+                });
+                listbox.replaceChildren();
+                if (!options.length) {
+                    var empty = document.createElement("div");
+                    empty.className = "list-group-item text-body-secondary";
+                    empty.textContent = "No matching stocked parts.";
+                    listbox.appendChild(empty);
+                } else {
+                    options.forEach(function (option, index) {
+                        var result = document.createElement("button");
+                        result.type = "button";
+                        result.className = "list-group-item list-group-item-action text-start";
+                        result.setAttribute("role", "option");
+                        result.setAttribute("aria-selected", option.value === select.value ? "true" : "false");
+                        result.dataset.value = option.value;
+                        result.textContent = option.textContent;
+                        result.addEventListener("mouseenter", function () {
+                            setActive(index);
+                        });
+                        listbox.appendChild(result);
+                    });
+                }
+                listbox.hidden = false;
+                input.setAttribute("aria-expanded", "true");
+                activeIndex = -1;
+                input.removeAttribute("aria-activedescendant");
+            }
+
+            function setActive(index) {
+                var options = listbox.querySelectorAll('[role="option"]');
+                if (!options.length) return;
+                activeIndex = ((index % options.length) + options.length) % options.length;
+                options.forEach(function (option, optionIndex) {
+                    option.classList.toggle("active", optionIndex === activeIndex);
+                });
+                options[activeIndex].id = input.id + "-option-" + activeIndex;
+                input.setAttribute("aria-activedescendant", options[activeIndex].id);
+                options[activeIndex].scrollIntoView({block: "nearest"});
+            }
+
+            function chooseOption(button) {
+                select.value = button.dataset.value;
+                input.value = button.textContent;
+                closeList();
+            }
+
+            input.addEventListener("focus", renderOptions);
+            input.addEventListener("input", function () {
+                select.value = "";
+                renderOptions();
+            });
+            input.addEventListener("keydown", function (event) {
+                if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                    event.preventDefault();
+                    if (listbox.hidden) renderOptions();
+                    var direction = event.key === "ArrowDown" ? 1 : -1;
+                    setActive(activeIndex < 0
+                        ? (direction > 0 ? 0 : listbox.querySelectorAll('[role="option"]').length - 1)
+                        : activeIndex + direction);
+                } else if (event.key === "Enter" && activeIndex >= 0) {
+                    event.preventDefault();
+                    chooseOption(listbox.querySelectorAll('[role="option"]')[activeIndex]);
+                } else if (event.key === "Escape") {
+                    closeList();
+                }
+            });
+            listbox.addEventListener("mousedown", function (event) {
+                var option = event.target.closest('[role="option"]');
+                if (option) {
+                    event.preventDefault();
+                    chooseOption(option);
+                }
+            });
+            if (select.value) {
+                input.value = select.options[select.selectedIndex].textContent;
+            }
+        }
+
+        document.querySelectorAll("[data-stock-picker]").forEach(setupStockPicker);
+        document.addEventListener("click", function (event) {
+            document.querySelectorAll("[data-stock-picker]").forEach(function (picker) {
+                if (picker.contains(event.target)) return;
+                var input = picker.querySelector("[data-stock-search]");
+                var listbox = picker.querySelector('[role="listbox"]');
+                listbox.hidden = true;
+                input.setAttribute("aria-expanded", "false");
+                input.removeAttribute("aria-activedescendant");
+            });
         });
 
         var recommendationButton = document.querySelector("[data-use-labour-recommendation]");

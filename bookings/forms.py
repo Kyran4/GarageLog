@@ -458,7 +458,6 @@ class QuoteLabourForm(BootstrapFormMixin, forms.Form):
 QuoteLabourFormSet = forms.formset_factory(
     QuoteLabourForm,
     extra=1,
-    can_delete=True,
-    max_num=20,
+    max_num=1,
     validate_max=True,
 )
