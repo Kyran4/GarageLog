@@ -1,5 +1,6 @@
 import calendar
 import datetime
+from decimal import Decimal
 
 from django import forms
 from django.contrib import messages
@@ -13,12 +14,24 @@ from django.views.generic import CreateView, DeleteView, DetailView, ListView, U
 
 from accounts.mixins import AdminRequiredMixin, RoleRequiredMixin
 from accounts.models import User
+from inventory.models import StockItem
 from vehicles.models import Vehicle
 from workshops.models import Workshop
 
 from . import scheduling
-from .forms import BookingForm, QuoteForm, StaffBookingForm
-from .models import Booking
+from .forms import (
+    BookingForm,
+    QuoteForm,
+    QuoteLabourFormSet,
+    QuotePartFormSet,
+    StaffBookingForm,
+)
+from .models import (
+    Booking,
+    BookingQuoteLabour,
+    BookingQuotePart,
+    ServiceLabourRecommendation,
+)
 
 
 class BookingQuerysetMixin(LoginRequiredMixin):
@@ -311,42 +324,171 @@ class BookingQuoteView(BookingQuerysetMixin, DetailView):
     template_name = "bookings/booking_quote.html"
     context_object_name = "booking"
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["labour_recommendation"] = ServiceLabourRecommendation.objects.filter(
+            service_type=self.object.service_type,
+        ).first()
+        return context
+
     def get_object(self, queryset=None):
         booking = super().get_object()
         if not booking.can_be_quoted_by(self.request.user):
             raise PermissionDenied
         return booking
 
+    def get_formsets(self, data=None):
+        bound_data = {"data": data} if data is not None else {}
+        return (
+            QuotePartFormSet(
+                prefix="parts",
+                workshop=self.object.workshop,
+                form_kwargs={"workshop": self.object.workshop, "vehicle": self.object.vehicle},
+                **bound_data,
+            ),
+            QuoteLabourFormSet(prefix="labour", **bound_data),
+        )
+
     def get(self, request, *args, **kwargs):
         self.object = self.get_object()
         form = QuoteForm(booking=self.object, user=request.user)
-        return self.render_to_response(self.get_context_data(form=form))
+        part_formset, labour_formset = self.get_formsets()
+        return self.render_to_response(self.get_context_data(
+            form=form,
+            part_formset=part_formset,
+            labour_formset=labour_formset,
+        ))
 
     def post(self, request, *args, **kwargs):
         self.object = self.get_object()
         form = QuoteForm(request.POST, booking=self.object, user=request.user)
-        if not form.is_valid():
-            return self.render_to_response(self.get_context_data(form=form))
+        part_formset, labour_formset = self.get_formsets(request.POST)
+        form_valid = form.is_valid()
+        parts_valid = part_formset.is_valid()
+        labour_valid = labour_formset.is_valid()
+        if not (form_valid and parts_valid and labour_valid):
+            return self.render_to_response(self.get_context_data(
+                form=form,
+                part_formset=part_formset,
+                labour_formset=labour_formset,
+            ))
+
+        parts = []
+        for line in part_formset.forms:
+            item = getattr(line, "cleaned_data", {})
+            if item and not item.get("DELETE") and item.get("stock_item"):
+                parts.append(item)
+        labour = []
+        for line in labour_formset.forms:
+            item = getattr(line, "cleaned_data", {})
+            if item and not item.get("DELETE") and item.get("description"):
+                labour.append(item)
+        if not parts and not labour:
+            form.add_error(None, "Add at least one part or labour item to the quote.")
+            return self.render_to_response(self.get_context_data(
+                form=form,
+                part_formset=part_formset,
+                labour_formset=labour_formset,
+            ))
 
         mechanic = request.user
         if request.user.is_admin_role:
             mechanic = form.cleaned_data.get("mechanic")
             if mechanic is None:
                 form.add_error("mechanic", "Choose a mechanic to assign this quote.")
-                return self.render_to_response(self.get_context_data(form=form))
+                return self.render_to_response(self.get_context_data(
+                    form=form,
+                    part_formset=part_formset,
+                    labour_formset=labour_formset,
+                ))
 
         if self.object._clashes(mechanic_id=mechanic.pk):
             form.add_error("mechanic", "That mechanic is already booked at this time.")
-            return self.render_to_response(self.get_context_data(form=form))
+            return self.render_to_response(self.get_context_data(
+                form=form,
+                part_formset=part_formset,
+                labour_formset=labour_formset,
+            ))
 
-        self.object.mechanic = mechanic
-        self.object.quote_amount = form.cleaned_data["quote_amount"]
-        self.object.quote_notes = form.cleaned_data["quote_notes"].strip()
-        self.object.quoted_at = timezone.now()
-        self.object.status = "QUOTED"
-        self.object.save(update_fields=[
-            "mechanic", "quote_amount", "quote_notes", "quoted_at", "status",
-        ])
+        with transaction.atomic():
+            stock_ids = {line["stock_item"].pk for line in parts}
+            locked_stock = {
+                item.pk: item
+                for item in (
+                    StockItem.objects.select_for_update()
+                    .filter(pk__in=stock_ids, workshop=self.object.workshop)
+                    .select_related("part")
+                )
+            }
+            requested_stock = {}
+            for line in parts:
+                stock_item_id = line["stock_item"].pk
+                requested_stock[stock_item_id] = (
+                    requested_stock.get(stock_item_id, 0) + line["quantity"]
+                )
+            unavailable = next(
+                (
+                    item_id for item_id, quantity in requested_stock.items()
+                    if quantity > getattr(locked_stock.get(item_id), "quantity", 0)
+                ),
+                None,
+            )
+            if unavailable is not None:
+                for line in part_formset.forms:
+                    if (
+                        getattr(line, "cleaned_data", {}).get("stock_item")
+                        and line.cleaned_data["stock_item"].pk == unavailable
+                    ):
+                        line.add_error(
+                            "quantity",
+                            "The requested quantity exceeds the workshop's current stock.",
+                        )
+                        break
+                else:
+                    form.add_error(None, "The selected part no longer has enough stock.")
+                return self.render_to_response(self.get_context_data(
+                    form=form,
+                    part_formset=part_formset,
+                    labour_formset=labour_formset,
+                ))
+
+            for line in parts:
+                line["stock_item"] = locked_stock[line["stock_item"].pk]
+            quote_total = sum(
+                (line["stock_item"].price * line["quantity"] for line in parts),
+                Decimal("0.00"),
+            ) + sum(
+                (line["charge"] for line in labour),
+                Decimal("0.00"),
+            )
+            if quote_total > Decimal("99999999.99"):
+                form.add_error(None, "The quote total is above the maximum supported amount.")
+                return self.render_to_response(self.get_context_data(
+                    form=form,
+                    part_formset=part_formset,
+                    labour_formset=labour_formset,
+                ))
+            for line in parts:
+                BookingQuotePart.objects.create(
+                    booking=self.object,
+                    stock_item=line["stock_item"],
+                    quantity=line["quantity"],
+                    unit_price=line["stock_item"].price,
+                )
+            for line in labour:
+                BookingQuoteLabour.objects.create(
+                    booking=self.object,
+                    description=line["description"].strip(),
+                    charge=line["charge"],
+                )
+            self.object.mechanic = mechanic
+            self.object.quote_amount = quote_total
+            self.object.quote_notes = form.cleaned_data["quote_notes"].strip()
+            self.object.quoted_at = timezone.now()
+            self.object.status = "QUOTED"
+            self.object.save(update_fields=[
+                "mechanic", "quote_amount", "quote_notes", "quoted_at", "status",
+            ])
         messages.success(request, "The quote has been sent to the customer.")
         return redirect("booking_detail", pk=self.object.pk)
 

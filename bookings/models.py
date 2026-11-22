@@ -1,10 +1,14 @@
 import datetime
+from decimal import Decimal
 
 from django.conf import settings
 from django.core.exceptions import NON_FIELD_ERRORS, ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Q
 from django.utils import timezone
+
+from inventory.models import StockItem
 
 from . import scheduling
 
@@ -201,3 +205,70 @@ class Booking(models.Model):
             and self.quote_amount is not None
             and self.is_upcoming
         )
+
+
+class BookingQuotePart(models.Model):
+    booking = models.ForeignKey(
+        Booking,
+        on_delete=models.CASCADE,
+        related_name="quote_parts",
+    )
+    stock_item = models.ForeignKey(
+        StockItem,
+        on_delete=models.PROTECT,
+        related_name="booking_quote_parts",
+    )
+    quantity = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+    unit_price = models.DecimalField(max_digits=8, decimal_places=2)
+
+    class Meta:
+        ordering = ["pk"]
+
+    def clean(self):
+        super().clean()
+        if self.booking_id and self.stock_item_id:
+            if self.booking.workshop_id != self.stock_item.workshop_id:
+                raise ValidationError({"stock_item": "Choose a part stocked at this booking's workshop."})
+
+    @property
+    def line_total(self):
+        return self.unit_price * self.quantity
+
+
+class BookingQuoteLabour(models.Model):
+    booking = models.ForeignKey(
+        Booking,
+        on_delete=models.CASCADE,
+        related_name="quote_labour",
+    )
+    description = models.CharField(max_length=150)
+    charge = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.00"))],
+    )
+
+    class Meta:
+        ordering = ["pk"]
+
+    @property
+    def line_total(self):
+        return self.charge
+
+
+class ServiceLabourRecommendation(models.Model):
+    service_type = models.CharField(max_length=100, unique=True)
+    recommended_charge = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.00"))],
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["service_type"]
+        verbose_name = "service labour recommendation"
+        verbose_name_plural = "service labour recommendations"
+
+    def __str__(self):
+        return f"{self.service_type} - ${self.recommended_charge:.2f}"
