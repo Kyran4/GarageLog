@@ -88,6 +88,10 @@ class JobPart(models.Model):
         choices=SupplyStatus.choices,
         default=SupplyStatus.READY,
     )
+    is_estimate = models.BooleanField(
+        default=False,
+        help_text="The customer price is an estimate that must be reviewed on the job card.",
+    )
     quantity = models.PositiveIntegerField(validators=[MinValueValidator(1)], default=1)
     unit_cost = models.DecimalField(
         max_digits=9,

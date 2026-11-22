@@ -13,8 +13,11 @@
     <form method="post" novalidate>
         {% csrf_token %}
         {% include 'includes/form.html' with form=form %}
-        <h2 class="h4 mt-4">Parts from {{ booking.workshop.name }} stock</h2>
-        <p class="text-body-secondary">Prices use this workshop&rsquo;s stock prices. Quoting does not reserve or deduct stock.</p>
+        <h2 class="h4 mt-4">Parts</h2>
+        <p class="text-body-secondary">
+            Search {{ booking.workshop.name }} stock or enter a manual part and estimated cost.
+            Manual estimates are confirmed on the job card; quoting does not reserve or deduct stock.
+        </p>
         {{ part_formset.management_form }}
         {% if part_formset.non_form_errors %}
         <div class="alert alert-danger" role="alert">
@@ -27,11 +30,24 @@
                 {% for hidden in line_form.hidden_fields %}{{ hidden }}{% endfor %}
                 {% for field in line_form.visible_fields %}
                     {% if field.name != "DELETE" %}
+                    {% if field.name == "stock_item" %}
+                    <div data-stock-fields{% if line_form.source.value != "STOCK" %} hidden{% endif %}>
                     <div class="mb-3">
+                        <label for="part-search-{{ line_form.prefix }}" class="visually-hidden">Search parts by name or part number</label>
+                        <input id="part-search-{{ line_form.prefix }}" class="form-control mb-2" type="search"
+                               placeholder="Search parts by name or number" data-part-search>
+                    </div>
+                    {% elif field.name == "manual_description" or field.name == "estimated_unit_price" %}
+                    <div data-manual-fields{% if line_form.source.value != "MANUAL" %} hidden{% endif %}>
+                    <div class="mb-3">
+                    {% else %}
+                    <div class="mb-3">
+                    {% endif %}
                         <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}{% if field.field.required %}<span class="text-danger" aria-hidden="true"> *</span>{% endif %}</label>
                         {{ field }}
                         {% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
                     </div>
+                    {% if field.name == "stock_item" or field.name == "manual_description" or field.name == "estimated_unit_price" %}</div>{% endif %}
                     {% endif %}
                 {% endfor %}
                 <div class="d-none">{{ line_form.DELETE }}</div>
@@ -45,10 +61,23 @@
                 {% for hidden in part_formset.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
                 {% for field in part_formset.empty_form.visible_fields %}
                     {% if field.name != "DELETE" %}
+                    {% if field.name == "stock_item" %}
+                    <div data-stock-fields hidden>
                     <div class="mb-3">
+                        <label for="part-search-{{ part_formset.empty_form.prefix }}" class="visually-hidden">Search parts by name or part number</label>
+                        <input id="part-search-{{ part_formset.empty_form.prefix }}" class="form-control mb-2" type="search"
+                               placeholder="Search parts by name or number" data-part-search>
+                    </div>
+                    {% elif field.name == "manual_description" or field.name == "estimated_unit_price" %}
+                    <div data-manual-fields hidden>
+                    <div class="mb-3">
+                    {% else %}
+                    <div class="mb-3">
+                    {% endif %}
                         <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}{% if field.field.required %}<span class="text-danger" aria-hidden="true"> *</span>{% endif %}</label>
                         {{ field }}
                     </div>
+                    {% if field.name == "stock_item" or field.name == "manual_description" or field.name == "estimated_unit_price" %}</div>{% endif %}
                     {% endif %}
                 {% endfor %}
                 <div class="d-none">{{ part_formset.empty_form.DELETE }}</div>
@@ -139,6 +168,24 @@
                     row.hidden = true;
                     addButton.disabled = Number(total.value) >= Number(container.dataset.max);
                 }
+            });
+            container.addEventListener("change", function (event) {
+                if (!event.target.name || !event.target.name.endsWith("-source")) return;
+                var row = event.target.closest(".quote-line-row");
+                row.querySelector("[data-stock-fields]").hidden = event.target.value !== "STOCK";
+                row.querySelectorAll("[data-manual-fields]").forEach(function (fields) {
+                    fields.hidden = event.target.value !== "MANUAL";
+                });
+            });
+            container.addEventListener("input", function (event) {
+                if (!event.target.matches("[data-part-search]")) return;
+                var row = event.target.closest(".quote-line-row");
+                var select = row.querySelector('select[name$="-stock_item"]');
+                var query = event.target.value.trim().toLocaleLowerCase();
+                Array.from(select.options).forEach(function (option) {
+                    option.hidden = Boolean(option.value && option.value !== select.value
+                        && !option.textContent.toLocaleLowerCase().includes(query));
+                });
             });
             addButton.disabled = Number(total.value) >= Number(container.dataset.max);
         });

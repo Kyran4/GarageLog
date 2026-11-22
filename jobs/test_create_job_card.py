@@ -172,6 +172,13 @@ def test_job_card_creation_transfers_accepted_quote_once(
         quantity=2,
         unit_price="19.95",
     )
+    BookingQuotePart.objects.create(
+        booking=confirmed_booking,
+        manual_description="Custom mounting bracket",
+        is_estimate=True,
+        quantity=3,
+        unit_price="12.50",
+    )
     BookingQuoteLabour.objects.create(
         booking=confirmed_booking,
         description="Replace filter",
@@ -191,7 +198,8 @@ def test_job_card_creation_transfers_accepted_quote_once(
     response = client.post(create_url(confirmed_booking))
 
     job_card = JobCard.objects.get(booking=confirmed_booking)
-    job_part = job_card.parts.get()
+    job_part = job_card.parts.get(part=part)
+    estimated_part = job_card.parts.get(is_estimate=True)
     stock.refresh_from_db()
     assert response.url == reverse('jobcard_detail', args=[job_card.pk])
     assert job_part.stock_item == stock
@@ -203,12 +211,22 @@ def test_job_card_creation_transfers_accepted_quote_once(
     assert job_part.supply_status == JobPart.SupplyStatus.READY
     assert job_card.labor_charge == Decimal("115.00")
     assert stock.quantity == 3
+    assert estimated_part.stock_item is None
+    assert estimated_part.part is None
+    assert estimated_part.name == "Custom mounting bracket"
+    assert estimated_part.source == JobPart.Source.MANUAL
+    assert estimated_part.quantity == 3
+    assert estimated_part.unit_price == Decimal("12.50")
+    assert estimated_part.is_estimate
+    assert b"Review each description, quantity, and price" in client.get(
+        reverse("jobcard_detail", args=[job_card.pk])
+    ).content
 
     response = client.post(create_url(confirmed_booking))
 
     stock.refresh_from_db()
     assert response.url == booking_url(confirmed_booking)
-    assert job_card.parts.count() == 1
+    assert job_card.parts.count() == 2
     assert stock.quantity == 3
 
 

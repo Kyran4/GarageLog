@@ -142,6 +142,67 @@ def test_job_card_status_can_be_changed_without_automatically_opening_invoice(cl
     assert job_card.booking.status == "IN_PROGRESS"
 
 
+def test_estimated_parts_must_be_reviewed_before_saving_job_card(client, job_card):
+    JobPart.objects.create(
+        job_card=job_card,
+        name="Custom mounting bracket",
+        source=JobPart.Source.MANUAL,
+        is_estimate=True,
+        quantity=2,
+        unit_price=Decimal("12.50"),
+    )
+    client.force_login(job_card.mechanic)
+    detail_url = reverse("jobcard_detail", kwargs={"pk": job_card.pk})
+
+    page = client.get(detail_url)
+    assert page.status_code == 200
+    assert b"This job includes estimated parts" in page.content
+    assert b"Estimated parts reviewed and prices confirmed" in page.content
+
+    response = client.post(
+        detail_url,
+        {
+            "status": "IN_PROGRESS",
+            "description": "",
+            "work_done": "",
+            "labor_charge": "45.00",
+        },
+    )
+    assert response.status_code == 200
+    assert "checklist_estimated_parts" in response.context["form"].errors
+    job_card.booking.refresh_from_db()
+    assert job_card.booking.status == "CONFIRMED"
+
+    response = client.post(
+        detail_url,
+        {
+            "status": "IN_PROGRESS",
+            "description": "",
+            "work_done": "",
+            "labor_charge": "45.00",
+            "checklist_estimated_parts": "DONE",
+        },
+    )
+    assert response.status_code == 302
+    job_card.refresh_from_db()
+    assert job_card.checklist["estimated_parts"] == "DONE"
+    job_card.booking.refresh_from_db()
+    assert job_card.booking.status == "IN_PROGRESS"
+
+    response = client.post(
+        detail_url,
+        {
+            "status": "IN_PROGRESS",
+            "description": "",
+            "work_done": "",
+            "labor_charge": "45.00",
+        },
+    )
+    assert response.status_code == 302
+    job_card.refresh_from_db()
+    assert job_card.checklist["estimated_parts"] == "DONE"
+
+
 def test_job_card_checklist_is_optional_and_persists_responses(client, job_card):
     client.force_login(job_card.mechanic)
     detail_url = reverse("jobcard_detail", kwargs={"pk": job_card.pk})

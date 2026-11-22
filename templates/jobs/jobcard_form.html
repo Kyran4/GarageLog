@@ -38,6 +38,15 @@
 
 <section class="mb-4" aria-labelledby="parts-heading">
     <h2 class="h5" id="parts-heading">Parts required</h2>
+    {% if has_estimated_parts %}
+    <div class="alert {% if estimated_parts_reviewed %}alert-info{% else %}alert-warning{% endif %}" role="alert">
+        {% if estimated_parts_reviewed %}
+        The estimated parts and prices have been reviewed and confirmed.
+        {% else %}
+        This job includes estimated parts. Review each description, quantity, and price, then confirm them in the checklist before saving job-card changes.
+        {% endif %}
+    </div>
+    {% endif %}
     {% if job_card.parts.all %}
     <div class="table-responsive">
         <table class="table table-striped align-middle">
@@ -45,7 +54,12 @@
             <tbody>
                 {% for part in job_card.parts.all %}
                 <tr>
-                    <td>{{ part.name }}</td>
+                    <td>
+                        {{ part.name }}
+                        {% if part.is_estimate %}
+                        <span class="badge text-bg-warning">Estimated price</span>
+                        {% endif %}
+                    </td>
                     <td>{{ part.get_supply_status_display }}</td>
                     <td>{{ part.quantity }}</td>
                     <td>{% if part.unit_cost != None %}${{ part.unit_cost }}{% else %}-{% endif %}</td>

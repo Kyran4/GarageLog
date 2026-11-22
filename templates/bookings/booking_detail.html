@@ -70,7 +70,7 @@
     {% if booking.quoted_at %}
     <dt class="col-sm-3">Quote</dt>
     <dd class="col-sm-9">
-        <strong>${{ booking.quote_amount|floatformat:2 }}</strong>
+        <strong>{% if has_estimated_parts %}Estimated total: {% endif %}${{ booking.quote_amount|floatformat:2 }}</strong>
         {% if booking.quote_notes %}<br>{{ booking.quote_notes|linebreaksbr }}{% endif %}
         {% if booking.quoted_at %}<br><span class="text-body-secondary">Quoted {{ booking.quoted_at|date:"j M Y, g:i a" }}</span>{% endif %}
         {% if booking.quote_parts.exists or booking.quote_labour.exists %}
@@ -81,10 +81,16 @@
                 <tbody>
                     {% for line in booking.quote_parts.all %}
                     <tr>
-                        <td>{{ line.stock_item.part.name }} <span class="text-body-secondary">({{ line.stock_item.part.part_number }})</span></td>
+                        <td>
+                            {% if line.is_estimate %}
+                            {{ line.manual_description }} <span class="badge text-bg-warning">Estimated &mdash; confirm in job card</span>
+                            {% else %}
+                            {{ line.stock_item.part.name }} <span class="text-body-secondary">({{ line.stock_item.part.part_number }})</span>
+                            {% endif %}
+                        </td>
                         <td>{{ line.quantity }}</td>
-                        <td>${{ line.unit_price|floatformat:2 }}</td>
-                        <td>${{ line.line_total|floatformat:2 }}</td>
+                        <td>{% if line.is_estimate %}Est. {% endif %}${{ line.unit_price|floatformat:2 }}</td>
+                        <td>{% if line.is_estimate %}Est. {% endif %}${{ line.line_total|floatformat:2 }}</td>
                     </tr>
                     {% endfor %}
                     {% for line in booking.quote_labour.all %}

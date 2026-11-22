@@ -21,6 +21,7 @@ class JobCardForm(BootstrapFormMixin, forms.ModelForm):
         ("parts_recorded", "Parts fitted recorded on the job card"),
         ("equipment_removed", "Tools and equipment removed from the vehicle"),
         ("handover_check", "Final vehicle check completed"),
+        ("estimated_parts", "Estimated parts reviewed and prices confirmed"),
     )
     CHECKLIST_CHOICES = (
         ("", "Not checked"),
@@ -73,6 +74,29 @@ class JobCardForm(BootstrapFormMixin, forms.ModelForm):
         self.fields["checklist_notes"].label = "Notes for attention or follow-up"
         self.fields["checklist_notes"].help_text = "Shown on the customer's service summary."
         self.fields["checklist_notes"].required = False
+        self.has_estimated_parts = (
+            self.instance.pk
+            and self.instance.parts.filter(is_estimate=True).exists()
+        )
+        self.estimated_parts_reviewed = (
+            (self.instance.checklist or {}).get("estimated_parts") == "DONE"
+        )
+        self.fields["checklist_estimated_parts"].help_text = (
+            "Required before saving while estimated parts are assigned."
+            if self.has_estimated_parts and not self.estimated_parts_reviewed else ""
+        )
+
+    def clean(self):
+        cleaned = super().clean()
+        if self.has_estimated_parts:
+            if self.estimated_parts_reviewed:
+                cleaned["checklist_estimated_parts"] = "DONE"
+            elif cleaned.get("checklist_estimated_parts") != "DONE":
+                self.add_error(
+                    "checklist_estimated_parts",
+                    "Review the estimated parts and confirm their prices before saving.",
+                )
+        return cleaned
 
     def save(self, commit=True):
         job_card = super().save(commit=False)

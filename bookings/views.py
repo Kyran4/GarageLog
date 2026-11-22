@@ -188,6 +188,7 @@ class BookingDetailView(BookingQuerysetMixin, DetailView):
             self.object.status == "QUOTED"
             and self.object.customer_id == user.pk
         )
+        context["has_estimated_parts"] = self.object.quote_parts.filter(is_estimate=True).exists()
         context["is_admin"] = user.is_admin_role
         return context
 
@@ -376,7 +377,7 @@ class BookingQuoteView(BookingQuerysetMixin, DetailView):
         parts = []
         for line in part_formset.forms:
             item = getattr(line, "cleaned_data", {})
-            if item and not item.get("DELETE") and item.get("stock_item"):
+            if item and not item.get("DELETE") and item.get("source") in {"STOCK", "MANUAL"}:
                 parts.append(item)
         labour = []
         for line in labour_formset.forms:
@@ -411,7 +412,8 @@ class BookingQuoteView(BookingQuerysetMixin, DetailView):
             ))
 
         with transaction.atomic():
-            stock_ids = {line["stock_item"].pk for line in parts}
+            stock_parts = [line for line in parts if line["source"] == "STOCK"]
+            stock_ids = {line["stock_item"].pk for line in stock_parts}
             locked_stock = {
                 item.pk: item
                 for item in (
@@ -421,7 +423,7 @@ class BookingQuoteView(BookingQuerysetMixin, DetailView):
                 )
             }
             requested_stock = {}
-            for line in parts:
+            for line in stock_parts:
                 stock_item_id = line["stock_item"].pk
                 requested_stock[stock_item_id] = (
                     requested_stock.get(stock_item_id, 0) + line["quantity"]
@@ -453,9 +455,15 @@ class BookingQuoteView(BookingQuerysetMixin, DetailView):
                 ))
 
             for line in parts:
-                line["stock_item"] = locked_stock[line["stock_item"].pk]
+                if line["source"] == "STOCK":
+                    line["stock_item"] = locked_stock[line["stock_item"].pk]
             quote_total = sum(
-                (line["stock_item"].price * line["quantity"] for line in parts),
+                (
+                    line["stock_item"].price * line["quantity"]
+                    if line["source"] == "STOCK"
+                    else line["estimated_unit_price"] * line["quantity"]
+                    for line in parts
+                ),
                 Decimal("0.00"),
             ) + sum(
                 (line["charge"] for line in labour),
@@ -471,9 +479,17 @@ class BookingQuoteView(BookingQuerysetMixin, DetailView):
             for line in parts:
                 BookingQuotePart.objects.create(
                     booking=self.object,
-                    stock_item=line["stock_item"],
+                    stock_item=line["stock_item"] if line["source"] == "STOCK" else None,
+                    manual_description=(
+                        "" if line["source"] == "STOCK" else line["manual_description"]
+                    ),
+                    is_estimate=line["source"] == "MANUAL",
                     quantity=line["quantity"],
-                    unit_price=line["stock_item"].price,
+                    unit_price=(
+                        line["stock_item"].price
+                        if line["source"] == "STOCK"
+                        else line["estimated_unit_price"]
+                    ),
                 )
             for line in labour:
                 BookingQuoteLabour.objects.create(

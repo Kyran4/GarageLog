@@ -17,15 +17,21 @@ from .tests import frozen_now
 pytestmark = pytest.mark.django_db
 
 
-def quote_data(*, stock_item=None, quantity=1, labour_description="Labour", labour_charge="125.50"):
+def quote_data(
+        *, stock_item=None, quantity=1, part_source=None, manual_description="", estimated_unit_price="",
+        labour_description="Labour", labour_charge="125.50"):
+    source = part_source or ("STOCK" if stock_item else "")
     return {
         "quote_notes": "",
         "parts-TOTAL_FORMS": "1",
         "parts-INITIAL_FORMS": "0",
         "parts-MIN_NUM_FORMS": "0",
         "parts-MAX_NUM_FORMS": "20",
+        "parts-0-source": source,
         "parts-0-stock_item": str(stock_item.pk) if stock_item else "",
-        "parts-0-quantity": str(quantity) if stock_item else "",
+        "parts-0-manual_description": manual_description,
+        "parts-0-estimated_unit_price": estimated_unit_price,
+        "parts-0-quantity": str(quantity) if source else "",
         "parts-0-DELETE": "",
         "labour-TOTAL_FORMS": "1",
         "labour-INITIAL_FORMS": "0",
@@ -105,6 +111,35 @@ def test_quote_uses_workshop_part_price_and_does_not_deduct_stock(
     assert BookingQuoteLabour.objects.filter(booking=booking, charge=Decimal("120.00")).exists()
 
 
+def test_quote_accepts_manual_part_estimate_without_stock_deduction(
+        client, mechanic, customer, vehicle, make_booking):
+    booking = make_booking(customer, vehicle)
+    client.force_login(mechanic)
+    data = quote_data(
+        part_source="MANUAL",
+        manual_description="Custom alternator",
+        estimated_unit_price="175.00",
+        quantity=2,
+        labour_description="",
+        labour_charge="",
+    )
+
+    response = client.post(reverse("booking_quote", kwargs={"pk": booking.pk}), data)
+
+    assert response.status_code == 302
+    booking.refresh_from_db()
+    quoted_part = booking.quote_parts.get()
+    assert quoted_part.stock_item is None
+    assert quoted_part.manual_description == "Custom alternator"
+    assert quoted_part.is_estimate
+    assert quoted_part.unit_price == Decimal("175.00")
+    assert quoted_part.line_total == Decimal("350.00")
+    assert booking.quote_amount == Decimal("350.00")
+    detail = client.get(reverse("booking_detail", kwargs={"pk": booking.pk}))
+    assert b"Estimated" in detail.content
+    assert b"confirm in job card" in detail.content
+
+
 def test_quote_rejects_part_quantity_above_available_stock(
         client, mechanic, customer, vehicle, workshop, make_part, make_stock, make_booking):
     part = make_part(universal=True)
@@ -132,6 +167,7 @@ def test_quote_checks_combined_quantity_when_the_same_part_is_added_twice(
     data = quote_data(stock_item=stock)
     data.update({
         "parts-TOTAL_FORMS": "2",
+        "parts-1-source": "STOCK",
         "parts-1-stock_item": str(stock.pk),
         "parts-1-quantity": "1",
         "parts-1-DELETE": "",
@@ -164,6 +200,7 @@ def test_quote_part_choices_are_limited_to_matching_in_stock_workshop_parts(
     assert "GOOD - Test part" in content
     assert "WRONG - Test part" not in content
     assert "EMPTY - Test part" not in content
+    assert "Search parts by name or number" in content
 
 
 def test_mechanic_sees_and_can_apply_service_labour_recommendation(
