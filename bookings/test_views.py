@@ -200,7 +200,12 @@ def test_quote_part_choices_are_limited_to_matching_in_stock_workshop_parts(
     assert "GOOD - Test part" in content
     assert "WRONG - Test part" not in content
     assert "EMPTY - Test part" not in content
-    assert "Search parts by name or number" in content
+    assert "Search and select a stocked part" in content
+    assert 'role="combobox"' in content
+    assert 'role="listbox"' in content
+    assert "data-part-search" not in content
+    assert "Manual part description" in content
+    assert "Estimated unit cost" in content
 
 
 def test_mechanic_sees_and_can_apply_service_labour_recommendation(
@@ -230,6 +235,24 @@ def test_quote_requires_at_least_one_part_or_labour_line(
 
     assert response.status_code == 200
     assert "Add at least one part or labour item" in response.content.decode()
+    booking.refresh_from_db()
+    assert booking.status == "PENDING"
+
+
+def test_quote_has_only_one_labour_charge(client, mechanic, customer, vehicle, make_booking):
+    booking = make_booking(customer, vehicle)
+    client.force_login(mechanic)
+    data = quote_data()
+    data.update({
+        "labour-TOTAL_FORMS": "2",
+        "labour-1-description": "Additional labour",
+        "labour-1-charge": "10.00",
+    })
+
+    response = client.post(reverse("booking_quote", kwargs={"pk": booking.pk}), data)
+
+    assert response.status_code == 200
+    assert response.context["labour_formset"].non_form_errors()
     booking.refresh_from_db()
     assert booking.status == "PENDING"
 
