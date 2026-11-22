@@ -320,12 +320,35 @@ class QuoteForm(BootstrapFormMixin, forms.Form):
 
 
 class QuotePartForm(BootstrapFormMixin, forms.Form):
+    source = forms.ChoiceField(
+        choices=[
+            ("", "Choose a part type"),
+            ("STOCK", "Use a stocked part"),
+            ("MANUAL", "Add a manual/estimated part"),
+        ],
+        required=False,
+        label="Part type",
+    )
     stock_item = forms.ModelChoiceField(
         queryset=StockItem.objects.none(),
         label="Part",
         empty_label="Select a stocked part",
+        required=False,
     )
-    quantity = forms.IntegerField(min_value=1)
+    manual_description = forms.CharField(
+        max_length=150,
+        required=False,
+        label="Manual part description",
+    )
+    estimated_unit_price = forms.DecimalField(
+        min_value=0,
+        max_digits=8,
+        decimal_places=2,
+        required=False,
+        label="Estimated unit cost",
+        widget=forms.NumberInput(attrs={"min": "0", "step": "0.01"}),
+    )
+    quantity = forms.IntegerField(min_value=1, required=False)
 
     def __init__(self, *args, workshop=None, vehicle=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -345,6 +368,35 @@ class QuotePartForm(BootstrapFormMixin, forms.Form):
             f"(${item.price:.2f} each; {item.quantity} in stock)"
         )
 
+    def clean(self):
+        cleaned_data = super().clean()
+        source = cleaned_data.get("source")
+        stock_item = cleaned_data.get("stock_item")
+        manual_description = (cleaned_data.get("manual_description") or "").strip()
+        quantity = cleaned_data.get("quantity")
+
+        if not source:
+            if (
+                stock_item
+                or manual_description
+                or cleaned_data.get("estimated_unit_price") is not None
+                or quantity
+            ):
+                self.add_error("source", "Choose whether this is a stocked or manual part.")
+            return cleaned_data
+
+        if quantity is None:
+            self.add_error("quantity", "Enter a quantity.")
+        if source == "STOCK" and stock_item is None:
+            self.add_error("stock_item", "Select a part from this workshop's stock.")
+        if source == "MANUAL":
+            if not manual_description:
+                self.add_error("manual_description", "Describe the part.")
+            if cleaned_data.get("estimated_unit_price") is None:
+                self.add_error("estimated_unit_price", "Enter an estimated unit cost.")
+        cleaned_data["manual_description"] = manual_description
+        return cleaned_data
+
 
 class QuotePartFormSetBase(forms.BaseFormSet):
     def __init__(self, *args, workshop=None, **kwargs):
@@ -360,6 +412,8 @@ class QuotePartFormSetBase(forms.BaseFormSet):
         for form in self.forms:
             data = getattr(form, "cleaned_data", {})
             if not data or data.get("DELETE"):
+                continue
+            if data.get("source") != "STOCK":
                 continue
             stock_item = data.get("stock_item")
             if stock_item is not None:

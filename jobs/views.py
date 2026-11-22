@@ -107,6 +107,10 @@ class JobCardDetailView(JobCardQuerysetMixin, RoleRequiredMixin, UpdateView):
             context["form"][f"checklist_{key}"]
             for key, _ in JobCardForm.CHECKLIST_ITEMS
         ]
+        context["has_estimated_parts"] = self.object.parts.filter(is_estimate=True).exists()
+        context["estimated_parts_reviewed"] = (
+            (self.object.checklist or {}).get("estimated_parts") == "DONE"
+        )
         return context
 
 
@@ -551,6 +555,19 @@ class JobCardCreateView(RoleRequiredMixin, View):
             return
 
         for quote_part in booking.quote_parts.select_related("stock_item__part"):
+            if quote_part.is_estimate:
+                JobPart.objects.create(
+                    job_card=job_card,
+                    name=quote_part.manual_description,
+                    source=JobPart.Source.MANUAL,
+                    supply_status=JobPart.SupplyStatus.READY,
+                    is_estimate=True,
+                    quantity=quote_part.quantity,
+                    unit_price=quote_part.unit_price,
+                    freight_charge=Decimal("0.00"),
+                )
+                continue
+
             stock_item = (
                 StockItem.objects.select_for_update()
                 .select_related("part")

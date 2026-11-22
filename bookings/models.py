@@ -217,18 +217,44 @@ class BookingQuotePart(models.Model):
         StockItem,
         on_delete=models.PROTECT,
         related_name="booking_quote_parts",
+        null=True,
+        blank=True,
     )
+    manual_description = models.CharField(max_length=150, blank=True)
+    is_estimate = models.BooleanField(default=False)
     quantity = models.PositiveIntegerField(validators=[MinValueValidator(1)])
     unit_price = models.DecimalField(max_digits=8, decimal_places=2)
 
     class Meta:
         ordering = ["pk"]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    Q(stock_item__isnull=False, manual_description="", is_estimate=False)
+                    | Q(stock_item__isnull=True, manual_description__gt="", is_estimate=True)
+                ),
+                name="booking_quote_part_source_valid",
+            ),
+        ]
 
     def clean(self):
         super().clean()
+        has_manual_description = bool(self.manual_description.strip())
+        if bool(self.stock_item_id) == has_manual_description:
+            raise ValidationError({
+                "manual_description": "Choose either a stocked part or a manual part description.",
+            })
+        if self.stock_item_id and self.is_estimate:
+            raise ValidationError({"is_estimate": "Stocked parts are priced from workshop inventory."})
+        if not self.stock_item_id and not self.is_estimate:
+            raise ValidationError({"is_estimate": "Manual part prices must be marked as estimates."})
         if self.booking_id and self.stock_item_id:
             if self.booking.workshop_id != self.stock_item.workshop_id:
                 raise ValidationError({"stock_item": "Choose a part stocked at this booking's workshop."})
+
+    @property
+    def display_name(self):
+        return self.stock_item.part.name if self.stock_item_id else self.manual_description
 
     @property
     def line_total(self):
