@@ -13,6 +13,7 @@ class Booking(models.Model):
 
     STATUS_CHOICES = [
         ("PENDING", "Pending"),
+        ("QUOTED", "Quote received"),
         ("CONFIRMED", "Confirmed"),
         ("IN_PROGRESS", "In Progress"),
         ("CANCELLED", "Cancelled"),
@@ -20,7 +21,7 @@ class Booking(models.Model):
     ]
 
     # Bookings that still take up a slot.
-    ACTIVE_STATUSES = ("PENDING", "CONFIRMED")
+    ACTIVE_STATUSES = ("PENDING", "QUOTED", "CONFIRMED")
 
     customer = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -56,6 +57,15 @@ class Booking(models.Model):
 
     service_type = models.CharField(max_length=100)
     notes = models.TextField(blank=True)
+    quote_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+    quote_notes = models.TextField(blank=True)
+    quoted_at = models.DateTimeField(null=True, blank=True)
+    quote_accepted_at = models.DateTimeField(null=True, blank=True)
 
     status = models.CharField(
         max_length=20,
@@ -71,13 +81,13 @@ class Booking(models.Model):
             # even if two requests arrive at the same moment.
             models.UniqueConstraint(
                 fields=["vehicle", "booking_date", "booking_time"],
-                condition=Q(status__in=["PENDING", "CONFIRMED"]),
+                condition=Q(status__in=["PENDING", "QUOTED", "CONFIRMED"]),
                 name="unique_active_vehicle_slot",
                 violation_error_message="This vehicle already has a booking at that time.",
             ),
             models.UniqueConstraint(
                 fields=["mechanic", "booking_date", "booking_time"],
-                condition=Q(status__in=["PENDING", "CONFIRMED"]),
+                condition=Q(status__in=["PENDING", "QUOTED", "CONFIRMED"]),
                 name="unique_active_mechanic_slot",
                 violation_error_message="That mechanic is already booked at that time.",
             ),
@@ -164,7 +174,11 @@ class Booking(models.Model):
         """Staff can edit bookings at their workshop. Customers can edit their own until it starts."""
         if self._is_staff_here(user):
             return True
-        return user.pk == self.customer_id and self.is_upcoming
+        return (
+            user.pk == self.customer_id
+            and self.status != "QUOTED"
+            and self.is_upcoming
+        )
 
     def can_be_cancelled_by(self, user):
         if not self.is_active:
@@ -172,3 +186,18 @@ class Booking(models.Model):
         if self._is_staff_here(user):
             return True
         return user.pk == self.customer_id and self.is_upcoming
+
+    def can_be_quoted_by(self, user):
+        if self.status != "PENDING" or not self.is_upcoming:
+            return False
+        if user.is_admin_role:
+            return True
+        return user.is_mechanic and user.workshop_id == self.workshop_id
+
+    def can_accept_quote_by(self, user):
+        return (
+            user.pk == self.customer_id
+            and self.status == "QUOTED"
+            and self.quote_amount is not None
+            and self.is_upcoming
+        )

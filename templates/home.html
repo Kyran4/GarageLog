@@ -1,15 +1,29 @@
 {% extends 'base.html' %}
-
 {% block title %}Home | GarageLog{% endblock %}
 
 {% block content %}
 <style>
     .gl-hero {
-        background: linear-gradient(135deg, #111827 0%, #1f2937 55%, #0b4a7d 100%);
+        background: linear-gradient(135deg, #111827 0%, #1f2937 45%, #0b4a7d 75%, #111827 100%);
+        background-size: 220% 220%;
         color: #fff;
         border-radius: 1rem;
         position: relative;
         overflow: hidden;
+        animation: gl-hero-gradient 14s ease-in-out infinite alternate;
+    }
+
+    .gl-hero::before {
+        content: "";
+        position: absolute;
+        left: -8rem;
+        bottom: -12rem;
+        width: 28rem;
+        height: 28rem;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(0, 120, 212, 0.3), rgba(0, 120, 212, 0) 68%);
+        pointer-events: none;
+        animation: gl-hero-drift 12s ease-in-out infinite alternate;
     }
 
         .gl-hero::after {
@@ -22,6 +36,7 @@
             border-radius: 50%;
             background: radial-gradient(circle, rgba(0, 163, 255, 0.35), rgba(0, 163, 255, 0) 70%);
             pointer-events: none;
+            animation: gl-hero-glow 7s ease-in-out infinite alternate;
         }
 
         .gl-hero > * {
@@ -38,6 +53,7 @@
         height: auto;
         flex-shrink: 0;
         filter: drop-shadow(0 0 18px rgba(0, 163, 255, 0.55));
+        animation: gl-logo-float 5s ease-in-out infinite;
     }
 
     .gl-wordmark-log {
@@ -57,6 +73,19 @@
         font-size: 0.85rem;
         font-weight: 600;
         letter-spacing: 0.02em;
+        box-shadow: 0 0 1.5rem rgba(0, 163, 255, 0.12);
+    }
+
+    .gl-badge::before {
+        content: "";
+        display: inline-block;
+        width: 0.45rem;
+        height: 0.45rem;
+        margin-right: 0.45rem;
+        border-radius: 50%;
+        background: #00a3ff;
+        box-shadow: 0 0 0.7rem rgba(0, 163, 255, 0.8);
+        animation: gl-status-pulse 2s ease-in-out infinite;
     }
 
     .gl-stat {
@@ -97,12 +126,13 @@
     .gl-card {
         border: 1px solid var(--bs-border-color);
         border-radius: 0.9rem;
-        transition: transform 0.15s ease, box-shadow 0.15s ease;
+        transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
     }
 
         .gl-card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 0.6rem 1.2rem rgba(0, 0, 0, 0.08);
+            transform: translateY(-4px);
+            border-color: rgba(0, 120, 212, 0.3);
+            box-shadow: 0 0.7rem 1.4rem rgba(0, 0, 0, 0.1);
         }
 
     .gl-step-number {
@@ -124,12 +154,45 @@
         border-radius: 1rem;
     }
 
+    @keyframes gl-hero-gradient {
+        from { background-position: 0% 50%; }
+        to { background-position: 100% 50%; }
+    }
+
+    @keyframes gl-hero-drift {
+        from { transform: translate3d(0, 0, 0) scale(0.9); }
+        to { transform: translate3d(2rem, -1rem, 0) scale(1.1); }
+    }
+
+    @keyframes gl-hero-glow {
+        from { transform: translate3d(0, 0, 0) scale(0.9); opacity: 0.65; }
+        to { transform: translate3d(-1.5rem, 1rem, 0) scale(1.08); opacity: 1; }
+    }
+
+    @keyframes gl-logo-float {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-5px); }
+    }
+
+    @keyframes gl-status-pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.45; }
+    }
+
     @media (prefers-reduced-motion: reduce) {
-        .gl-card {
+        .gl-hero,
+        .gl-hero::before,
+        .gl-hero::after,
+        .gl-logo-mark,
+        .gl-badge::before,
+        .gl-card,
+        .gl-icon {
             transition: none;
+            animation: none;
         }
 
-            .gl-card:hover {
+            .gl-card:hover,
+            .gl-card:hover .gl-icon {
                 transform: none;
             }
     }
@@ -160,7 +223,7 @@
         <h1 class="display-4 fw-bold mb-0" id="home-title">Garage<span class="gl-wordmark-log">Log</span></h1>
     </div>
     <p class="lead mx-auto mb-4" style="max-width: 40rem;">Vehicle service history, bookings and WOF and registration reminders for independent workshops.</p>
-    <div class="d-flex flex-wrap justify-content-center gap-2 mb-5">
+    <div class="gl-hero-actions d-flex flex-wrap justify-content-center gap-2 mb-5">
         {% if user.is_authenticated %}
         <a class="btn btn-primary btn-lg" href="{% url 'dashboard' %}">Go to your dashboard</a>
         {% else %}
@@ -263,17 +326,17 @@
         <h2 class="h1 fw-bold" id="steps-title">How it works</h2>
     </div>
     <div class="row g-4 text-center">
-        <div class="col-md-4">
+        <div class="col-md-4 gl-motion">
             <span class="gl-step-number" aria-hidden="true">1</span>
             <h3 class="h5">Add your vehicle</h3>
             <p class="text-body-secondary mb-0">Create an account and enter your number plate, vehicle details and WOF and rego dates.</p>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-4 gl-motion">
             <span class="gl-step-number" aria-hidden="true">2</span>
             <h3 class="h5">Book a service</h3>
             <p class="text-body-secondary mb-0">Choose a workshop and a time that suits you. The workshop confirms it.</p>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-4 gl-motion">
             <span class="gl-step-number" aria-hidden="true">3</span>
             <h3 class="h5">Keep the history</h3>
             <p class="text-body-secondary mb-0">After the job, the work is saved on your vehicle's record for next time.</p>
@@ -315,7 +378,7 @@
 </section>
 
 {# ---------- Call to action ---------- #}
-<section class="gl-cta text-center px-3 px-md-5 py-5 mb-2" aria-labelledby="cta-title">
+<section class="gl-cta gl-motion text-center px-3 px-md-5 py-5 mb-2" aria-labelledby="cta-title">
     {% if user.is_authenticated %}
     <h2 class="h2 fw-bold" id="cta-title">Welcome back</h2>
     <p class="mb-4">Pick up where you left off.</p>

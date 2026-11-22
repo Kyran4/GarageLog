@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+
+{% block title %}Quote booking #{{ booking.pk }} | GarageLog{% endblock %}
+
+{% block content %}
+<nav aria-label="Breadcrumb"><a href="{% url 'booking_detail' booking.pk %}">&larr; Back to booking</a></nav>
+<div class="gl-banner my-3">
+    <h1 class="h2 mb-1">Accept &amp; quote booking #{{ booking.pk }}</h1>
+    <p class="mb-0 text-body-secondary">{{ booking.service_type }} for {{ booking.vehicle }}</p>
+</div>
+
+<section class="gl-panel p-3 p-lg-4">
+    <form method="post" novalidate>
+        {% csrf_token %}
+        {% include 'includes/form.html' with form=form %}
+        <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary">Send quote</button>
+            <a class="btn btn-outline-secondary" href="{% url 'booking_detail' booking.pk %}">Cancel</a>
+        </div>
+    </form>
+</section>
+{% endblock %}

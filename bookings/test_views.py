@@ -12,6 +12,57 @@ from .tests import frozen_now
 pytestmark = pytest.mark.django_db
 
 
+# ---------------------------------------------------------------- mechanic quoting
+
+
+def test_mechanic_accepts_booking_and_submits_quote(client, mechanic, customer, vehicle, make_booking):
+    booking = make_booking(customer, vehicle)
+    client.force_login(mechanic)
+
+    response = client.post(
+        reverse("booking_quote", kwargs={"pk": booking.pk}),
+        {"quote_amount": "125.50", "quote_notes": "Parts and labour included"},
+    )
+
+    assert response.status_code == 302
+    booking.refresh_from_db()
+    assert booking.status == "QUOTED"
+    assert booking.mechanic == mechanic
+    assert str(booking.quote_amount) == "125.50"
+    assert booking.quote_notes == "Parts and labour included"
+    assert booking.quoted_at is not None
+
+
+def test_customer_accepts_quote_and_finalizes_booking(client, mechanic, customer, vehicle, make_booking):
+    booking = make_booking(customer, vehicle)
+    client.force_login(mechanic)
+    client.post(
+        reverse("booking_quote", kwargs={"pk": booking.pk}),
+        {"quote_amount": "125.50", "quote_notes": "Parts and labour included"},
+    )
+
+    client.force_login(customer)
+    response = client.post(reverse("booking_accept_quote", kwargs={"pk": booking.pk}))
+
+    assert response.status_code == 302
+    booking.refresh_from_db()
+    assert booking.status == "CONFIRMED"
+    assert booking.quote_accepted_at is not None
+
+
+def test_customer_cannot_accept_another_customers_quote(client, customer, make_user, make_vehicle, make_booking):
+    other = make_user("other-customer")
+    other_vehicle = make_vehicle(other, plate="QUOT111")
+    booking = make_booking(other, other_vehicle, status="QUOTED", mechanic=None)
+    booking.quote_amount = 100
+    booking.save(update_fields=["quote_amount"])
+    client.force_login(customer)
+
+    response = client.post(reverse("booking_accept_quote", kwargs={"pk": booking.pk}))
+
+    assert response.status_code == 404
+
+
 def names(response):
     return [template.name for template in response.templates]
 

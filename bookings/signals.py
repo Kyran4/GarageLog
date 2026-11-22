@@ -27,10 +27,17 @@ def notify_customer_of_booking_status_change(sender, instance, created, raw=Fals
     if raw or created or previous_status is None or previous_status == instance.status:
         return
 
+    if instance.status == "QUOTED":
+        message = f"Booking #{instance.pk} has received a quote."
+    elif instance.status == "CONFIRMED" and previous_status == "QUOTED":
+        message = f"Booking #{instance.pk} quote accepted; the booking is confirmed."
+    else:
+        message = f"Booking #{instance.pk} is now {instance.get_status_display()}."
+
     notification = Notification.objects.create(
         recipient=instance.customer,
         booking=instance,
-        message=f"Booking #{instance.pk} is now {instance.get_status_display()}.",
+        message=message,
     )
     updates_url = f"{settings.SITE_URL.rstrip('/')}{reverse('notifications:list')}"
     send_mail(

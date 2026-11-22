@@ -57,9 +57,17 @@ class CustomerDashboardView(CustomerRequiredMixin, TemplateView):
         user = self.request.user
         upcoming = upcoming_bookings(customer=user)
         vehicles = list(Vehicle.objects.filter(owner=user))
+        completed_services = Booking.objects.filter(
+            customer=user,
+            status='COMPLETED',
+        ).select_related('vehicle', 'workshop', 'job_card').order_by(
+            '-booking_date', '-booking_time',
+        )
         context['vehicle_count'] = len(vehicles)
         context['upcoming_count'] = len(upcoming)
         context['next_bookings'] = upcoming[:3]
+        context['completed_service_count'] = completed_services.count()
+        context['service_history'] = list(completed_services[:5])
         context['expiring_vehicles'] = [
             vehicle for vehicle in vehicles
             if vehicle.wof_status in ('expired', 'soon') or vehicle.rego_status in ('expired', 'soon')
