@@ -16,6 +16,8 @@
     var targetPointerX = 0;
     var targetPointerY = 0;
     var pulseStart = 0;
+    var pulseX = 0;
+    var pulseY = 0;
 
     function randomGenerator(seed) {
         return function () {
@@ -51,8 +53,33 @@
         canvas.width = Math.round(bounds.width * pixelRatio);
         canvas.height = Math.round(bounds.height * pixelRatio);
         context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+        pulseX = bounds.width / 2;
+        pulseY = bounds.height / 2;
         createPoints();
         draw(0);
+    }
+
+    function updatePointer(clientX, clientY) {
+        var bounds = canvas.getBoundingClientRect();
+        var centerX = bounds.left + bounds.width / 2;
+        var centerY = bounds.top + bounds.height / 2;
+        var sphereRadius = Math.min(bounds.width, bounds.height) * 0.43 * 0.84;
+        var offsetX = (clientX - centerX) / sphereRadius;
+        var offsetY = (clientY - centerY) / (sphereRadius * 0.96);
+        var insideSphere = offsetX * offsetX + offsetY * offsetY <= 1;
+
+        targetPointerX = insideSphere ? offsetX : 0;
+        targetPointerY = insideSphere ? offsetY : 0;
+        hero.style.cursor = insideSphere ? "pointer" : "";
+
+        if (reducedMotion.matches) {
+            pointerX = targetPointerX;
+            pointerY = targetPointerY;
+            hero.style.setProperty("--gl-hero-pointer-x", ((pointerX + 1) * 50) + "%");
+            hero.style.setProperty("--gl-hero-pointer-y", ((pointerY + 1) * 50) + "%");
+        }
+
+        return insideSphere;
     }
 
     function draw(time) {
@@ -97,6 +124,12 @@
         var sinRotation = Math.sin(rotation);
         var cosTilt = Math.cos(tilt);
         var sinTilt = Math.sin(tilt);
+        var pulseProgress = pulseStart ? (time - pulseStart) / 760 : 1;
+
+        if (pulseProgress >= 1) {
+            pulseStart = 0;
+            pulseProgress = 1;
+        }
 
         points.forEach(function (point) {
             var rotatedX = point.x * cosRotation - point.z * sinRotation;
@@ -105,14 +138,38 @@
             var depth = point.y * sinTilt + rotatedZ * cosTilt;
             var perspective = 1 / (1.45 - depth * 0.24);
             var shimmer = reducedMotion.matches ? 0.82 : 0.68 + Math.sin(time * 0.002 + point.phase) * 0.24;
+            var x = centerX + rotatedX * radius * perspective;
+            var y = centerY + rotatedY * radius * perspective;
+            var ripple = 0;
+
+            if (pulseStart && pulseProgress >= 0) {
+                var distance = Math.hypot(x - pulseX, y - pulseY);
+                var bandWidth = radius * 0.055;
+                var firstFront = radius * (0.035 + pulseProgress * 0.68);
+                ripple = Math.max(0, 1 - Math.abs(distance - firstFront) / bandWidth) * (1 - pulseProgress);
+
+                var trailingProgress = (pulseProgress - 0.2) / 0.8;
+                if (trailingProgress >= 0 && trailingProgress < 1) {
+                    var trailingFront = radius * (0.035 + trailingProgress * 0.68);
+                    var trailingWave = Math.max(0, 1 - Math.abs(distance - trailingFront) / bandWidth);
+                    ripple = Math.max(ripple, trailingWave * (1 - trailingProgress) * 0.58);
+                }
+
+                if (distance > 0 && ripple > 0) {
+                    var displacement = radius * 0.018 * ripple / distance;
+                    x += (x - pulseX) * displacement;
+                    y += (y - pulseY) * displacement;
+                }
+            }
 
             projected.push({
-                x: centerX + rotatedX * radius * perspective,
-                y: centerY + rotatedY * radius * perspective,
+                x: x,
+                y: y,
                 depth: depth,
                 alpha: (0.18 + (depth + 1) * 0.34) * shimmer,
                 size: point.size * (0.72 + (depth + 1) * 0.3),
-                warm: rotatedX * 0.5 + 0.5
+                warm: rotatedX * 0.5 + 0.5,
+                ripple: ripple
             });
         });
 
@@ -121,25 +178,15 @@
             var red = Math.round(78 + point.warm * 177);
             var green = Math.round(191 + point.warm * 8);
             var blue = Math.round(255 - point.warm * 121);
-            context.fillStyle = "rgba(" + red + ", " + green + ", " + blue + ", " + point.alpha + ")";
+            var rippleTint = point.ripple * 0.72;
+            red = Math.round(red + (139 - red) * rippleTint);
+            green = Math.round(green + (222 - green) * rippleTint);
+            blue = Math.round(blue + (255 - blue) * rippleTint);
+            context.fillStyle = "rgba(" + red + ", " + green + ", " + blue + ", " + Math.min(1, point.alpha + point.ripple * 0.28) + ")";
             context.beginPath();
-            context.arc(point.x, point.y, point.size, 0, Math.PI * 2);
+            context.arc(point.x, point.y, point.size + point.ripple * 0.8, 0, Math.PI * 2);
             context.fill();
         });
-
-        if (pulseStart && !reducedMotion.matches) {
-            var pulseProgress = (time - pulseStart) / 680;
-            if (pulseProgress >= 1) {
-                pulseStart = 0;
-            } else if (pulseProgress >= 0) {
-                var pulseRadius = radius * (0.4 + pulseProgress * 0.65);
-                context.beginPath();
-                context.ellipse(centerX, centerY, pulseRadius, pulseRadius * 0.82, 0, 0, Math.PI * 2);
-                context.strokeStyle = "rgba(132, 220, 255, " + (0.28 * (1 - pulseProgress)) + ")";
-                context.lineWidth = 1;
-                context.stroke();
-            }
-        }
 
         if (!reducedMotion.matches && visible && !document.hidden) {
             frame = window.requestAnimationFrame(draw);
@@ -148,31 +195,22 @@
 
     hero.addEventListener("pointermove", function (event) {
         if (event.pointerType === "touch") return;
-        var bounds = hero.getBoundingClientRect();
-        targetPointerX = Math.max(-1, Math.min(1, ((event.clientX - bounds.left) / bounds.width - 0.5) * 2));
-        targetPointerY = Math.max(-1, Math.min(1, ((event.clientY - bounds.top) / bounds.height - 0.5) * 2));
-        if (reducedMotion.matches) {
-            pointerX = targetPointerX;
-            pointerY = targetPointerY;
-            hero.style.setProperty("--gl-hero-pointer-x", ((pointerX + 1) * 50) + "%");
-            hero.style.setProperty("--gl-hero-pointer-y", ((pointerY + 1) * 50) + "%");
-        }
+        updatePointer(event.clientX, event.clientY);
     });
 
     hero.addEventListener("pointerleave", function () {
         targetPointerX = 0;
         targetPointerY = 0;
-        if (reducedMotion.matches) {
-            pointerX = 0;
-            pointerY = 0;
-            hero.style.setProperty("--gl-hero-pointer-x", "50%");
-            hero.style.setProperty("--gl-hero-pointer-y", "50%");
-        }
+        hero.style.cursor = "";
+        if (reducedMotion.matches) updatePointer(-1, -1);
     });
 
     hero.addEventListener("click", function (event) {
         if (event.target.closest("a, button, input, select, textarea, [role='button']")) return;
-        if (reducedMotion.matches) return;
+        if (reducedMotion.matches || !updatePointer(event.clientX, event.clientY)) return;
+        var bounds = canvas.getBoundingClientRect();
+        pulseX = event.clientX - bounds.left;
+        pulseY = event.clientY - bounds.top;
         pulseStart = window.performance.now();
         updateAnimation();
     });
