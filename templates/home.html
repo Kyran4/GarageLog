@@ -1,79 +1,102 @@
 {% extends 'base.html' %}
+{% load static %}
 {% block title %}Home | GarageLog{% endblock %}
 
 {% block content %}
 <style>
     .gl-hero {
-        background: linear-gradient(135deg, #111827 0%, #1f2937 45%, #0b4a7d 75%, #111827 100%);
-        background-size: 220% 220%;
+        background:
+            radial-gradient(ellipse at 50% 32%, rgba(0, 120, 212, 0.16), transparent 40%),
+            radial-gradient(ellipse at 50% 0%, rgba(252, 183, 77, 0.08), transparent 48%),
+            #080d16;
         color: #fff;
-        border-radius: 1rem;
+        border: 1px solid rgba(148, 163, 184, 0.16);
+        border-radius: 1.25rem;
         position: relative;
         overflow: hidden;
-        animation: gl-hero-gradient 14s ease-in-out infinite alternate;
+        isolation: isolate;
+        box-shadow: 0 1.5rem 4rem rgba(10, 25, 45, 0.2);
     }
 
     .gl-hero::before {
         content: "";
         position: absolute;
-        left: -8rem;
-        bottom: -12rem;
-        width: 28rem;
-        height: 28rem;
-        border-radius: 50%;
-        background: radial-gradient(circle, rgba(0, 120, 212, 0.3), rgba(0, 120, 212, 0) 68%);
+        inset: 0;
+        z-index: -1;
+        background-image:
+            linear-gradient(rgba(148, 163, 184, 0.035) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(148, 163, 184, 0.035) 1px, transparent 1px);
+        background-size: 48px 48px;
+        mask-image: linear-gradient(to bottom, black, transparent 82%);
         pointer-events: none;
-        animation: gl-hero-drift 12s ease-in-out infinite alternate;
     }
 
-        .gl-hero::after {
-            content: "";
-            position: absolute;
-            right: -6rem;
-            top: -6rem;
-            width: 22rem;
-            height: 22rem;
-            border-radius: 50%;
-            background: radial-gradient(circle, rgba(0, 163, 255, 0.35), rgba(0, 163, 255, 0) 70%);
-            pointer-events: none;
-            animation: gl-hero-glow 7s ease-in-out infinite alternate;
-        }
+    .gl-hero > * {
+        position: relative;
+        z-index: 1;
+    }
 
-        .gl-hero > * {
-            position: relative;
-            z-index: 1;
-        }
+    .gl-hero-scene {
+        position: absolute !important;
+        z-index: 0 !important;
+        top: -2.5rem;
+        left: 50%;
+        width: min(100%, 38rem);
+        aspect-ratio: 1;
+        transform: translateX(-50%);
+        pointer-events: none;
+        opacity: 0.88;
+        -webkit-mask-image: linear-gradient(to bottom, black 62%, transparent 98%);
+        mask-image: linear-gradient(to bottom, black 62%, transparent 98%);
+    }
+
+    .gl-hero-canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+    }
+
+    .gl-hero-content {
+        padding-top: clamp(13rem, 27vw, 18rem);
+    }
 
     .gl-hero .lead {
-        color: #d1d5db;
+        color: #bdc9d8;
     }
 
     .gl-logo-mark {
-        width: 5rem;
+        width: 4.25rem;
         height: auto;
         flex-shrink: 0;
-        filter: drop-shadow(0 0 18px rgba(0, 163, 255, 0.55));
+        filter: drop-shadow(0 0 20px rgba(0, 163, 255, 0.7));
         animation: gl-logo-float 5s ease-in-out infinite;
     }
 
     .gl-wordmark-log {
-        color: #4cb8ff;
-        background: linear-gradient(135deg, #2b9bf0, #6fd0ff);
+        color: #66c8ff;
+        background: linear-gradient(135deg, #2b9bf0 10%, #74d4ff 52%, #ffd18a 100%);
         -webkit-background-clip: text;
         background-clip: text;
         -webkit-text-fill-color: transparent;
+    }
+
+    .gl-hero .display-4 {
+        letter-spacing: -0.055em;
+        text-shadow: 0 0 2.5rem rgba(20, 130, 220, 0.22);
     }
 
     .gl-badge {
         display: inline-block;
         padding: 0.3rem 0.8rem;
         border-radius: 999px;
-        background: rgba(0, 163, 255, 0.18);
-        color: #7cc8ff;
+        background: rgba(12, 31, 49, 0.82);
+        border: 1px solid rgba(115, 193, 237, 0.24);
+        color: #b7dfff;
         font-size: 0.85rem;
         font-weight: 600;
         letter-spacing: 0.02em;
-        box-shadow: 0 0 1.5rem rgba(0, 163, 255, 0.12);
+        box-shadow: 0 0 1.5rem rgba(0, 163, 255, 0.16);
+        backdrop-filter: blur(10px);
     }
 
     .gl-badge::before {
@@ -83,28 +106,36 @@
         height: 0.45rem;
         margin-right: 0.45rem;
         border-radius: 50%;
-        background: #00a3ff;
-        box-shadow: 0 0 0.7rem rgba(0, 163, 255, 0.8);
+        background: #69d6ff;
+        box-shadow: 0 0 0.7rem rgba(0, 163, 255, 0.9);
         animation: gl-status-pulse 2s ease-in-out infinite;
     }
 
     .gl-stat {
-        background: rgba(255, 255, 255, 0.08);
-        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(13, 25, 40, 0.74);
+        border: 1px solid rgba(148, 163, 184, 0.18);
         border-radius: 0.75rem;
         padding: 0.9rem 1rem;
         height: 100%;
+        backdrop-filter: blur(10px);
+        transition: border-color 0.2s ease, transform 0.2s ease, background-color 0.2s ease;
     }
 
-        .gl-stat strong {
-            display: block;
-            font-size: 1.1rem;
-        }
+    .gl-stat:hover {
+        transform: translateY(-3px);
+        border-color: rgba(100, 200, 255, 0.4);
+        background: rgba(15, 35, 54, 0.88);
+    }
 
-        .gl-stat span {
-            color: #d1d5db;
-            font-size: 0.9rem;
-        }
+    .gl-stat strong {
+        display: block;
+        font-size: 1.1rem;
+    }
+
+    .gl-stat span {
+        color: #bdc9d8;
+        font-size: 0.9rem;
+    }
 
     .gl-icon {
         width: 3rem;
@@ -154,21 +185,6 @@
         border-radius: 1rem;
     }
 
-    @keyframes gl-hero-gradient {
-        from { background-position: 0% 50%; }
-        to { background-position: 100% 50%; }
-    }
-
-    @keyframes gl-hero-drift {
-        from { transform: translate3d(0, 0, 0) scale(0.9); }
-        to { transform: translate3d(2rem, -1rem, 0) scale(1.1); }
-    }
-
-    @keyframes gl-hero-glow {
-        from { transform: translate3d(0, 0, 0) scale(0.9); opacity: 0.65; }
-        to { transform: translate3d(-1.5rem, 1rem, 0) scale(1.08); opacity: 1; }
-    }
-
     @keyframes gl-logo-float {
         0%, 100% { transform: translateY(0); }
         50% { transform: translateY(-5px); }
@@ -180,66 +196,79 @@
     }
 
     @media (prefers-reduced-motion: reduce) {
-        .gl-hero,
-        .gl-hero::before,
-        .gl-hero::after,
         .gl-logo-mark,
         .gl-badge::before,
         .gl-card,
-        .gl-icon {
+        .gl-icon,
+        .gl-stat {
             transition: none;
             animation: none;
         }
 
-            .gl-card:hover,
-            .gl-card:hover .gl-icon {
-                transform: none;
-            }
+        .gl-card:hover,
+        .gl-card:hover .gl-icon,
+        .gl-stat:hover {
+            transform: none;
+        }
+    }
+
+    @media (max-width: 575.98px) {
+        .gl-hero-scene {
+            top: -1rem;
+            width: 112%;
+        }
+
+        .gl-hero-content {
+            padding-top: 12rem;
+        }
     }
 </style>
 
 {# ---------- Hero ---------- #}
 <section class="gl-hero text-center px-3 px-md-5 py-5 mb-5" aria-labelledby="home-title">
-    <span class="gl-badge mb-3">Built for independent workshops</span>
-    <div class="d-flex flex-wrap justify-content-center align-items-center gap-3 mb-2">
-        <svg class="gl-logo-mark" viewBox="0 0 124 126" aria-hidden="true" focusable="false">
-            <defs>
-                <linearGradient id="glHeroGrad" x1="0" y1="0" x2="1" y2="1">
-                    <stop offset="0%" stop-color="#0078D4"/>
-                    <stop offset="100%" stop-color="#00A3FF"/>
-                </linearGradient>
-            </defs>
-            <g transform="translate(8, 8)">
-                <path d="M 10 46 L 56 10 L 102 46" fill="none" stroke="url(#glHeroGrad)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M 14 46 L 14 96 C 14 104 20 110 28 110 L 84 110 C 92 110 98 104 98 96 L 98 46 Z" fill="url(#glHeroGrad)"/>
-                <g fill="#FFFFFF">
-                    <rect x="24" y="58" width="40" height="6" rx="3"/>
-                    <rect x="24" y="74" width="40" height="6" rx="3"/>
-                    <rect x="24" y="90" width="24" height="6" rx="3"/>
+    <div class="gl-hero-scene" aria-hidden="true"><canvas class="gl-hero-canvas"></canvas></div>
+    <div class="gl-hero-content">
+        <span class="gl-badge mb-3">Built for independent workshops</span>
+        <div class="d-flex flex-wrap justify-content-center align-items-center gap-3 mb-2">
+            <svg class="gl-logo-mark" viewBox="0 0 124 126" aria-hidden="true" focusable="false">
+                <defs>
+                    <linearGradient id="glHeroGrad" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0%" stop-color="#0078D4"/>
+                        <stop offset="100%" stop-color="#00A3FF"/>
+                    </linearGradient>
+                </defs>
+                <g transform="translate(8, 8)">
+                    <path d="M 10 46 L 56 10 L 102 46" fill="none" stroke="url(#glHeroGrad)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M 14 46 L 14 96 C 14 104 20 110 28 110 L 84 110 C 92 110 98 104 98 96 L 98 46 Z" fill="url(#glHeroGrad)"/>
+                    <g fill="#FFFFFF">
+                        <rect x="24" y="58" width="40" height="6" rx="3"/>
+                        <rect x="24" y="74" width="40" height="6" rx="3"/>
+                        <rect x="24" y="90" width="24" height="6" rx="3"/>
+                    </g>
+                    <path d="M 54 78 L 68 92 L 92 62" fill="none" stroke="#1F2937" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
                 </g>
-                <path d="M 54 78 L 68 92 L 92 62" fill="none" stroke="#1F2937" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
-            </g>
-        </svg>
-        <h1 class="display-4 fw-bold mb-0" id="home-title">Garage<span class="gl-wordmark-log">Log</span></h1>
-    </div>
-    <p class="lead mx-auto mb-4" style="max-width: 40rem;">Vehicle service history, bookings and WOF and registration reminders for independent workshops.</p>
-    <div class="gl-hero-actions d-flex flex-wrap justify-content-center gap-2 mb-5">
-        {% if user.is_authenticated %}
-        <a class="btn btn-primary btn-lg" href="{% url 'dashboard' %}">Go to your dashboard</a>
-        {% else %}
-        <a class="btn btn-primary btn-lg" href="{% url 'accounts:login' %}">Log in</a>
-        <a class="btn btn-outline-light btn-lg" href="{% url 'accounts:signup' %}">Create an account</a>
-        {% endif %}
-    </div>
-    <div class="row g-3 text-start mx-auto" style="max-width: 46rem;">
-        <div class="col-12 col-md-4">
-            <div class="gl-stat"><strong>One record</strong><span>for every vehicle</span></div>
+            </svg>
+            <h1 class="display-4 fw-bold mb-0" id="home-title">Garage<span class="gl-wordmark-log">Log</span></h1>
         </div>
-        <div class="col-12 col-md-4">
-            <div class="gl-stat"><strong>1-hour slots</strong><span>no double bookings</span></div>
+        <p class="lead mx-auto mb-4" style="max-width: 40rem;">Vehicle service history, bookings and WOF and registration reminders for independent workshops.</p>
+        <div class="gl-hero-actions d-flex flex-wrap justify-content-center gap-2 mb-5">
+            {% if user.is_authenticated %}
+            <a class="btn btn-primary btn-lg" href="{% url 'dashboard' %}">Go to your dashboard</a>
+            {% else %}
+            <a class="btn btn-primary btn-lg" href="{% url 'accounts:login' %}">Log in</a>
+            <a class="btn btn-outline-light btn-lg" href="{% url 'accounts:signup' %}">Create an account</a>
+            {% endif %}
         </div>
-        <div class="col-12 col-md-4">
-            <div class="gl-stat"><strong>Expiry warnings</strong><span>for WOF and rego</span></div>
+        <div class="row g-3 text-start mx-auto" style="max-width: 46rem;">
+            <div class="col-12 col-md-4">
+                <div class="gl-stat"><strong>One record</strong><span>for every vehicle</span></div>
+            </div>
+            <div class="col-12 col-md-4">
+                <div class="gl-stat"><strong>1-hour slots</strong><span>no double bookings</span></div>
+            </div>
+            <div class="col-12 col-md-4">
+                <div class="gl-stat"><strong>Expiry warnings</strong><span>for WOF and rego</span></div>
+            </div>
         </div>
     </div>
 </section>
@@ -392,4 +421,8 @@
     </div>
     {% endif %}
 </section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'hero-orbit.js' %}" defer></script>
 {% endblock %}

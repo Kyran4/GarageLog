@@ -3,21 +3,190 @@
 {% block title %}Quote booking #{{ booking.pk }} | GarageLog{% endblock %}
 
 {% block content %}
-<nav aria-label="Breadcrumb"><a href="{% url 'booking_detail' booking.pk %}">&larr; Back to booking</a></nav>
-<div class="gl-banner my-3">
-    <h1 class="h2 mb-1">Accept &amp; quote booking #{{ booking.pk }}</h1>
-    <p class="mb-0 text-body-secondary">{{ booking.service_type }} for {{ booking.vehicle }}</p>
-</div>
+<style>
+    .quote-page {
+        max-width: 62rem;
+        margin-inline: auto;
+    }
 
-<section class="gl-panel p-3 p-lg-4">
+    .quote-back-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        color: var(--bs-secondary-color);
+        font-size: 0.925rem;
+        font-weight: 600;
+        text-decoration: none;
+        transition: color 0.18s ease, gap 0.18s ease;
+    }
+
+    .quote-back-link:hover {
+        color: var(--bs-primary);
+        gap: 0.65rem;
+    }
+
+    .quote-banner {
+        background:
+            radial-gradient(ellipse at 92% 10%, rgba(0, 163, 255, 0.34), transparent 35%),
+            linear-gradient(120deg, #111827, #1f2937 65%, #103858);
+        border: 1px solid rgba(148, 163, 184, 0.16);
+        box-shadow: 0 0.8rem 2rem rgba(10, 25, 45, 0.13);
+    }
+
+    .quote-kicker {
+        display: inline-block;
+        margin-bottom: 0.8rem;
+        padding: 0.3rem 0.75rem;
+        border: 1px solid rgba(115, 193, 237, 0.28);
+        border-radius: 999px;
+        background: rgba(12, 31, 49, 0.76);
+        color: #b7dfff;
+        font-size: 0.82rem;
+        font-weight: 650;
+        letter-spacing: 0.02em;
+    }
+
+    .quote-panel {
+        padding: clamp(1.1rem, 3vw, 2rem) !important;
+        box-shadow: 0 0.7rem 2rem rgba(15, 23, 42, 0.08);
+    }
+
+    .quote-panel > form > .mb-3 {
+        padding: 1rem;
+        margin-bottom: 0.8rem !important;
+        border: 1px solid var(--bs-border-color);
+        border-radius: 0.8rem;
+        background: var(--bs-tertiary-bg);
+    }
+
+    .quote-panel .form-label {
+        font-size: 0.9rem;
+        font-weight: 650;
+        margin-bottom: 0.45rem;
+    }
+
+    .quote-panel .form-control,
+    .quote-panel .form-select {
+        min-height: 2.85rem;
+        border-color: var(--bs-border-color);
+        background-color: var(--bs-body-bg);
+    }
+
+    .quote-panel textarea.form-control {
+        min-height: auto;
+    }
+
+    .quote-section-heading {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.85rem;
+        margin: 1.8rem 0 1rem;
+        padding-bottom: 0.85rem;
+        border-bottom: 1px solid var(--bs-border-color);
+    }
+
+    .quote-section-heading h2 {
+        margin: 0 0 0.2rem;
+        font-weight: 700;
+    }
+
+    .quote-section-heading p {
+        margin: 0;
+        color: var(--bs-secondary-color);
+    }
+
+    .quote-section-index {
+        display: inline-grid;
+        width: 2.35rem;
+        height: 2.35rem;
+        flex: 0 0 2.35rem;
+        place-items: center;
+        border: 1px solid rgba(0, 120, 212, 0.22);
+        border-radius: 0.75rem;
+        background: rgba(0, 120, 212, 0.1);
+        color: var(--bs-primary);
+        font-size: 0.8rem;
+        font-weight: 800;
+    }
+
+    .quote-line-row {
+        position: relative;
+        padding: clamp(0.9rem, 2.4vw, 1.35rem) !important;
+        border-color: var(--bs-border-color) !important;
+        border-radius: 0.85rem !important;
+        background: var(--bs-tertiary-bg);
+        transition: border-color 0.18s ease, box-shadow 0.18s ease;
+    }
+
+    .quote-line-row:focus-within {
+        border-color: rgba(0, 120, 212, 0.48) !important;
+        box-shadow: 0 0 0 0.18rem rgba(0, 120, 212, 0.08);
+    }
+
+    .quote-line-row [data-stock-picker] {
+        position: relative;
+    }
+
+    .quote-line-row [role="listbox"] {
+        position: absolute;
+        z-index: 5;
+        top: calc(100% + 0.3rem);
+        right: 0;
+        left: 0;
+        border: 1px solid var(--bs-border-color);
+        background: var(--bs-body-bg);
+        box-shadow: 0 0.8rem 1.8rem rgba(15, 23, 42, 0.18);
+    }
+
+    .quote-labour-row {
+        padding: 1rem;
+        border: 1px solid var(--bs-border-color);
+        border-radius: 0.85rem;
+        background: var(--bs-tertiary-bg);
+    }
+
+    .quote-actions {
+        position: sticky;
+        bottom: 0;
+        z-index: 4;
+        margin: 1.5rem calc(clamp(1.1rem, 3vw, 2rem) * -1) calc(clamp(1.1rem, 3vw, 2rem) * -1);
+        padding: 1rem clamp(1.1rem, 3vw, 2rem);
+        border-top: 1px solid var(--bs-border-color);
+        border-radius: 0 0 1rem 1rem;
+        background: var(--bs-body-bg);
+        background: color-mix(in srgb, var(--bs-body-bg) 92%, transparent);
+        backdrop-filter: blur(12px);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .quote-back-link,
+        .quote-line-row {
+            transition: none;
+        }
+    }
+</style>
+
+<div class="quote-page">
+    <nav class="mb-3" aria-label="Breadcrumb">
+        <a class="quote-back-link" href="{% url 'booking_detail' booking.pk %}"><span aria-hidden="true">&larr;</span> Back to booking</a>
+    </nav>
+    <div class="gl-banner quote-banner my-3">
+        <span class="quote-kicker">Booking #{{ booking.pk }}</span>
+        <h1 class="h2 mb-1">Build your quote</h1>
+        <p class="mb-0 text-body-secondary">{{ booking.service_type }} for {{ booking.vehicle }}</p>
+    </div>
+
+<section class="gl-panel quote-panel p-3 p-lg-4">
     <form method="post" novalidate>
         {% csrf_token %}
         {% include 'includes/form.html' with form=form %}
-        <h2 class="h4 mt-4">Parts</h2>
-        <p class="text-body-secondary">
-            Search {{ booking.workshop.name }} stock or enter a manual part and estimated cost.
-            Manual estimates are confirmed on the job card; quoting does not reserve or deduct stock.
-        </p>
+        <div class="quote-section-heading">
+            <span class="quote-section-index" aria-hidden="true">01</span>
+            <div>
+                <h2 class="h4">Parts</h2>
+                <p>Search {{ booking.workshop.name }} stock or add a manual estimate. Quoting does not reserve or deduct stock.</p>
+            </div>
+        </div>
         {{ part_formset.management_form }}
         {% if part_formset.non_form_errors %}
         <div class="alert alert-danger" role="alert">
@@ -63,8 +232,10 @@
                         {% for error in line_form.quantity.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
                     </div>
                 </div>
-                <div class="d-none">{{ line_form.DELETE }}</div>
-                <button type="button" class="btn btn-sm btn-outline-danger" data-remove-quote-line>Remove part</button>
+                <div class="d-flex justify-content-end">
+                    <div class="d-none">{{ line_form.DELETE }}</div>
+                    <button type="button" class="btn btn-sm btn-outline-danger" data-remove-quote-line>Remove part</button>
+                </div>
             </div>
             {% endfor %}
         </div>
@@ -102,12 +273,20 @@
                         {{ part_formset.empty_form.quantity }}
                     </div>
                 </div>
-                <div class="d-none">{{ part_formset.empty_form.DELETE }}</div>
-                <button type="button" class="btn btn-sm btn-outline-danger" data-remove-quote-line>Remove part</button>
+                <div class="d-flex justify-content-end">
+                    <div class="d-none">{{ part_formset.empty_form.DELETE }}</div>
+                    <button type="button" class="btn btn-sm btn-outline-danger" data-remove-quote-line>Remove part</button>
+                </div>
             </div>
         </template>
 
-        <h2 class="h4 mt-4">Labour</h2>
+        <div class="quote-section-heading">
+            <span class="quote-section-index" aria-hidden="true">02</span>
+            <div>
+                <h2 class="h4">Labour</h2>
+                <p>Add the labour description and charge for this job.</p>
+            </div>
+        </div>
         {% if labour_recommendation %}
         <div class="alert alert-info d-flex flex-wrap justify-content-between align-items-center gap-2">
             <span>Recommended labour-only charge for {{ booking.service_type }}: <strong>NZ${{ labour_recommendation.recommended_charge|floatformat:2 }}</strong>. Parts are quoted separately.</span>
@@ -125,7 +304,7 @@
         {% endif %}
         <div id="labour-formset">
             {% for line_form in labour_formset %}
-            <div class="quote-line-row border rounded p-3 mb-2">
+            <div class="quote-line-row quote-labour-row border rounded p-3 mb-2">
                 {% for hidden in line_form.hidden_fields %}{{ hidden }}{% endfor %}
                 {% for field in line_form.visible_fields %}
                     {% if field.name != "DELETE" %}
@@ -139,12 +318,13 @@
             </div>
             {% endfor %}
         </div>
-        <div class="d-flex gap-2">
+        <div class="quote-actions d-flex flex-wrap gap-2">
             <button type="submit" class="btn btn-primary">Send quote</button>
             <a class="btn btn-outline-secondary" href="{% url 'booking_detail' booking.pk %}">Cancel</a>
         </div>
     </form>
 </section>
+</div>
 <script>
     document.addEventListener("DOMContentLoaded", function () {
         document.querySelectorAll("[data-quote-formset]").forEach(function (container) {
