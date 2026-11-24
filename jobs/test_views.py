@@ -450,6 +450,42 @@ def test_warehouse_part_without_stock_becomes_backorder_and_is_supplier_ordered(
     assert warehouse_item.quantity == 0
 
 
+def test_backorder_receipt_does_not_complete_when_supplied_quantity_is_insufficient(
+    client, job_card, make_part, warehouse, warehouse_staff
+):
+    part = make_part(part_number="BACK-INSUFF", name="Insufficient backordered filter")
+    client.force_login(job_card.mechanic)
+    response = client.post(reverse("jobcard_part_add", kwargs={"pk": job_card.pk}), {
+        "part": str(part.pk),
+        "source": "WORKSHOP",
+        "quantity": "3",
+        "unit_cost": "",
+        "unit_price": "18.00",
+        "freight_charge": "12.99",
+    })
+    assert response.status_code == 302
+    job_part = JobPart.objects.get(job_card=job_card)
+
+    client.force_login(warehouse_staff)
+    order_url = reverse("supplier_order_create", kwargs={"part_id": job_part.pk})
+    response = client.post(order_url, {
+        "supplier": "Parts Supplier",
+        "supplier_reference": "PO-SHORT",
+        "unit_cost": "7.25",
+    })
+    assert response.status_code == 302
+    order = SupplierOrder.objects.get(job_part=job_part)
+    SupplierOrder.objects.filter(pk=order.pk).update(quantity=1)
+
+    response = client.post(reverse("supplier_order_receive", kwargs={"pk": order.pk}))
+    assert response.status_code == 302
+    order.refresh_from_db()
+    job_part.refresh_from_db()
+    assert order.received_at is None
+    assert job_part.supply_status == JobPart.SupplyStatus.ON_ORDER
+    assert not warehouse.stock.filter(part=part).exists()
+
+
 def test_only_warehouse_staff_and_admin_can_manage_supplier_orders(
     client, job_card, make_part, warehouse_staff, admin_user
 ):

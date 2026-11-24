@@ -371,7 +371,7 @@ class SupplierOrderReceiveView(WarehouseStaffRequiredMixin, View):
     def post(self, request, pk):
         with transaction.atomic():
             order = get_object_or_404(
-                SupplierOrder.objects.select_for_update().select_related("job_part", "part"),
+                SupplierOrder.objects.select_for_update(),
                 pk=pk,
             )
             job_part = (
@@ -391,6 +391,21 @@ class SupplierOrderReceiveView(WarehouseStaffRequiredMixin, View):
             if warehouse is None:
                 messages.error(request, "Set up a parts warehouse before receiving supplier orders.")
                 return redirect("supplier_order_list")
+
+            if job_part:
+                stock_item = (
+                    StockItem.objects.select_for_update()
+                    .filter(workshop=warehouse, part=order.part)
+                    .first()
+                )
+                existing_quantity = stock_item.quantity if stock_item else 0
+                if existing_quantity + order.quantity < job_part.quantity:
+                    messages.error(
+                        request,
+                        "This supplier order cannot cover the job's backordered quantity. "
+                        "No stock or order status was changed.",
+                    )
+                    return redirect("supplier_order_list")
 
             stock_item, _ = StockItem.objects.get_or_create(
                 workshop=warehouse,
