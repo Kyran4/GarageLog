@@ -371,7 +371,7 @@ class SupplierOrderReceiveView(WarehouseStaffRequiredMixin, View):
     def post(self, request, pk):
         with transaction.atomic():
             order = get_object_or_404(
-                SupplierOrder.objects.select_for_update().select_related("job_part", "part"),
+                SupplierOrder.objects.select_for_update(),
                 pk=pk,
             )
             job_part = (
