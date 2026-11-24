@@ -196,6 +196,10 @@ class BookingForm(BootstrapFormMixin, forms.ModelForm):
         elif workshops.count() == 1:
             self.initial.setdefault("workshop", workshops.first().pk)
 
+        # "Same issue has returned" only means something when there is a previous repair to link to.
+        if not booking.previous_booking_id and not self.initial.get("same_issue_returned"):
+            del self.fields["same_issue_returned"]
+
     # ----------------------------------------------------------- helpers
 
     def _workshop(self):
@@ -318,7 +322,19 @@ class StaffBookingForm(BookingForm):
         self.fields["workshop"].disabled = False
         self.fields["workshop"].help_text = ""
 
+        # A new booking starts as Pending or Confirmed. A quote is made from the quote page, so
+        # "Quote received" is only listed for a booking that is already quoted.
+        current = self.instance.status if self.instance.pk else None
+        allowed = {"PENDING", "CONFIRMED"} if current is None else {s for s, _ in Booking.STATUS_CHOICES} - {"QUOTED"}
+        if current:
+            allowed.add(current)
+        self.fields["status"].choices = [(s, label) for s, label in Booking.STATUS_CHOICES if s in allowed]
+        if current is None:
+            self.initial.setdefault("status", "PENDING")
+
         if user is not None and user.is_mechanic:
+            # The earlier-time alert is the customer's own choice, so mechanics never see it.
+            del self.fields["earlier_slot_opt_in"]
             workshop = user.workshop
             del self.fields["workshop"]
             self.instance.workshop = workshop

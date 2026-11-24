@@ -66,7 +66,13 @@ class JobCardForm(BootstrapFormMixin, forms.ModelForm):
             "open_invoice",
         ])
         if self.instance and self.instance.pk:
-            self.fields["status"].initial = self.instance.booking.status
+            current = self.instance.booking.status
+            self.fields["status"].initial = current
+            # Work on a job moves forward or is cancelled; it doesn't go back to waiting for a quote.
+            self.fields["status"].choices = [
+                (value, label) for value, label in Booking.STATUS_CHOICES
+                if value not in ("PENDING", "QUOTED") or value == current
+            ]
         self.fields["labor_charge"].widget.attrs.update({"min": 0, "step": "0.01"})
         self.fields["description"].widget.attrs["rows"] = 3
         self.fields["work_done"].widget.attrs["rows"] = 5
