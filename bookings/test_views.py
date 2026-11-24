@@ -1180,6 +1180,9 @@ def test_mechanic_can_record_vehicle_dropoff_checkin(
     booking = make_booking(customer, vehicle, mechanic=mechanic)
     client.force_login(mechanic)
 
+    page = client.get(reverse("booking_detail", kwargs={"pk": booking.pk}))
+    assert "Confirmed contact number" in page.content.decode()
+
     response = client.post(reverse("booking_dropoff_checkin", kwargs={"pk": booking.pk}), {
         "dropoff_contact": "021 555 0100",
         "dropoff_details": "Keys in the drop-box",
@@ -1191,6 +1194,19 @@ def test_mechanic_can_record_vehicle_dropoff_checkin(
     assert booking.dropoff_checked_in_at is not None
     assert booking.dropoff_checked_in_by == mechanic
     assert booking.dropoff_issue == "Noise returns over 60 km/h"
+
+
+def test_dropoff_checkin_is_not_part_of_the_booking_form_or_customer_page(
+        client, customer, mechanic, vehicle, make_booking):
+    booking = make_booking(customer, vehicle, mechanic=mechanic)
+    client.force_login(customer)
+
+    form_page = client.get(reverse("create_booking"))
+    assert not {"dropoff_contact", "dropoff_details", "dropoff_issue"} & set(
+        form_page.context["form"].fields
+    )
+    detail_page = client.get(reverse("booking_detail", kwargs={"pk": booking.pk}))
+    assert "Confirmed contact number" not in detail_page.content.decode()
 
 
 def test_mechanic_can_assign_available_courtesy_vehicle(

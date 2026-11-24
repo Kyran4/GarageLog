@@ -104,22 +104,6 @@ class BookingForm(BootstrapFormMixin, forms.ModelForm):
         required=False,
         help_text="Link this booking to the previous repair so the mechanic can review what was tried.",
     )
-    dropoff_contact = forms.CharField(
-        label="Drop-off contact number",
-        required=False,
-        max_length=150,
-        help_text="Confirm the number we can call on drop-off.",
-    )
-    dropoff_details = forms.CharField(
-        label="Key and drop-off details",
-        required=False,
-        widget=forms.Textarea(attrs={"rows": 3, "placeholder": "Where are the keys, alarm details, or parking instructions?"}),
-    )
-    dropoff_issue = forms.CharField(
-        label="Issue to confirm at drop-off",
-        required=False,
-        widget=forms.Textarea(attrs={"rows": 3, "placeholder": "Describe any symptoms or concerns for the mechanic."}),
-    )
     courtesy_vehicle_requested = forms.BooleanField(
         label="Request a courtesy vehicle",
         required=False,
@@ -160,9 +144,6 @@ class BookingForm(BootstrapFormMixin, forms.ModelForm):
             "service_type",
             "notes",
             "same_issue_returned",
-            "dropoff_contact",
-            "dropoff_details",
-            "dropoff_issue",
             "courtesy_vehicle_requested",
             "courtesy_vehicle_start",
             "courtesy_vehicle_end",
@@ -328,7 +309,7 @@ class StaffBookingForm(BookingForm):
         fields = [
             "customer", "workshop", "vehicle", "booking_date", "booking_time", "service_type",
             "notes", "mechanic", "status",
-            "same_issue_returned", "dropoff_contact", "dropoff_details", "dropoff_issue",
+            "same_issue_returned",
             "courtesy_vehicle_requested", "courtesy_vehicle_start", "courtesy_vehicle_end",
         ]
 

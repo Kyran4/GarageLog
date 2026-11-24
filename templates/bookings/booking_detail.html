@@ -92,12 +92,6 @@
     <dd class="col-sm-9">{% if booking.mechanic %}{{ booking.mechanic.get_full_name|default:booking.mechanic.username }}{% else %}<span class="text-body-secondary">Not assigned yet</span>{% endif %}</dd>
     <dt class="col-sm-3">Notes</dt>
     <dd class="col-sm-9">{{ booking.notes|default:"-"|linebreaksbr }}</dd>
-    <dt class="col-sm-3">Drop-off contact</dt>
-    <dd class="col-sm-9">{{ booking.dropoff_contact|default:"-" }}</dd>
-    <dt class="col-sm-3">Key / drop-off details</dt>
-    <dd class="col-sm-9">{{ booking.dropoff_details|default:"-"|linebreaksbr }}</dd>
-    <dt class="col-sm-3">Issue at drop-off</dt>
-    <dd class="col-sm-9">{{ booking.dropoff_issue|default:"-"|linebreaksbr }}</dd>
     {% if booking.courtesy_vehicle_requested %}
     <dt class="col-sm-3">Courtesy vehicle</dt>
     <dd class="col-sm-9">
@@ -165,6 +159,13 @@
         <h2 class="h5" id="dropoff-heading">Vehicle drop-off check-in</h2>
         {% if booking.dropoff_checked_in_at %}
         <p class="text-body-secondary">Checked in {{ booking.dropoff_checked_in_at|date:"j M Y, g:i a" }}{% if booking.dropoff_checked_in_by %} by {{ booking.dropoff_checked_in_by.get_full_name|default:booking.dropoff_checked_in_by.username }}{% endif %}.</p>
+        {% endif %}
+        {% if booking.dropoff_contact or booking.dropoff_details or booking.dropoff_issue %}
+        <dl class="row">
+            {% if booking.dropoff_contact %}<dt class="col-sm-3">Confirmed contact</dt><dd class="col-sm-9">{{ booking.dropoff_contact }}</dd>{% endif %}
+            {% if booking.dropoff_issue %}<dt class="col-sm-3">Issue at drop-off</dt><dd class="col-sm-9">{{ booking.dropoff_issue|linebreaksbr }}</dd>{% endif %}
+            {% if booking.dropoff_details %}<dt class="col-sm-3">Key / drop-off details</dt><dd class="col-sm-9">{{ booking.dropoff_details|linebreaksbr }}</dd>{% endif %}
+        </dl>
         {% endif %}
         <form method="post" action="{% url 'booking_dropoff_checkin' booking.pk %}" class="row g-3">
             {% csrf_token %}
