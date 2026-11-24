@@ -7,9 +7,10 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
 from django.db import IntegrityError, transaction
-from django.shortcuts import redirect
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
+from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
 from accounts.mixins import AdminRequiredMixin, RoleRequiredMixin
@@ -30,8 +31,10 @@ from .models import (
     Booking,
     BookingQuoteLabour,
     BookingQuotePart,
+    EarlierSlotOffer,
     ServiceLabourRecommendation,
 )
+from .signals import offer_earlier_slot_to_next_customer
 
 
 class BookingQuerysetMixin(LoginRequiredMixin):
@@ -190,6 +193,14 @@ class BookingDetailView(BookingQuerysetMixin, DetailView):
         )
         context["has_estimated_parts"] = self.object.quote_parts.filter(is_estimate=True).exists()
         context["is_admin"] = user.is_admin_role
+        context["earlier_slot_offers"] = (
+            self.object.earlier_slot_offers.filter(
+                status=EarlierSlotOffer.STATUS_PENDING,
+                source_booking__status="CANCELLED",
+            ).select_related("source_booking")
+            if user.pk == self.object.customer_id
+            else EarlierSlotOffer.objects.none()
+        )
         return context
 
 
@@ -576,6 +587,110 @@ class BookingCancelView(BookingQuerysetMixin, DetailView):
         booking.save(update_fields=["status"])
         messages.success(request, "The booking has been cancelled.")
         return redirect("booking_list")
+
+
+class EarlierSlotOfferAcceptView(LoginRequiredMixin, View):
+    def post(self, request, offer_pk):
+        with transaction.atomic():
+            offer = get_object_or_404(
+                EarlierSlotOffer.objects.select_for_update().select_related(
+                    "source_booking__workshop",
+                    "target_booking",
+                ),
+                pk=offer_pk,
+                target_booking__customer=request.user,
+            )
+            target = offer.target_booking
+            source = offer.source_booking
+
+            if offer.status != EarlierSlotOffer.STATUS_PENDING:
+                messages.info(request, "This earlier-time offer is no longer available.")
+                return redirect("booking_detail", pk=target.pk)
+
+            eligible = (
+                source.status == "CANCELLED"
+                and source.starts_at >= timezone.now()
+                and target.is_upcoming
+                and target.earlier_slot_opt_in
+                and target.workshop_id == source.workshop_id
+                and target.booking_date == source.booking_date
+                and target.booking_time > source.booking_time
+            )
+            scheduling.lock_capacity(source.workshop)
+            same_slot = Booking.objects.filter(
+                workshop_id=source.workshop_id,
+                booking_date=source.booking_date,
+                booking_time=source.booking_time,
+                status__in=Booking.ACTIVE_STATUSES,
+            ).exclude(pk=target.pk)
+            at_capacity = same_slot.count() >= scheduling.capacity(source.workshop)
+            conflicts = (
+                (target.vehicle_id and same_slot.filter(vehicle_id=target.vehicle_id).exists())
+                or (target.mechanic_id and same_slot.filter(mechanic_id=target.mechanic_id).exists())
+            )
+
+            if not eligible or at_capacity or conflicts:
+                offer.status = (
+                    EarlierSlotOffer.STATUS_UNAVAILABLE
+                    if eligible
+                    else EarlierSlotOffer.STATUS_WITHDRAWN
+                )
+                offer.responded_at = timezone.now()
+                offer.save(update_fields=["status", "responded_at"])
+                offer_earlier_slot_to_next_customer(source)
+                messages.warning(
+                    request,
+                    "That earlier time is no longer available. Your existing booking has not changed.",
+                )
+                return redirect("booking_detail", pk=target.pk)
+
+            offer.status = EarlierSlotOffer.STATUS_ACCEPTED
+            offer.responded_at = timezone.now()
+            offer.save(update_fields=["status", "responded_at"])
+            target.booking_date = source.booking_date
+            target.booking_time = source.booking_time
+            try:
+                with transaction.atomic():
+                    target.save(update_fields=["booking_date", "booking_time"])
+            except IntegrityError:
+                offer.status = EarlierSlotOffer.STATUS_UNAVAILABLE
+                offer.responded_at = timezone.now()
+                offer.save(update_fields=["status", "responded_at"])
+                offer_earlier_slot_to_next_customer(source)
+                messages.warning(
+                    request,
+                    "That earlier time was just taken. Your existing booking has not changed.",
+                )
+                return redirect("booking_detail", pk=target.pk)
+
+        messages.success(
+            request,
+            f"Your booking has been moved to {source.booking_date:%A} "
+            f"{source.booking_date.day} {source.booking_date:%B} "
+            f"at {scheduling.format_time(source.booking_time)}.",
+        )
+        return redirect("booking_detail", pk=target.pk)
+
+
+class EarlierSlotOfferDeclineView(LoginRequiredMixin, View):
+    def post(self, request, offer_pk):
+        with transaction.atomic():
+            offer = get_object_or_404(
+                EarlierSlotOffer.objects.select_for_update().select_related(
+                    "source_booking",
+                    "target_booking",
+                ),
+                pk=offer_pk,
+                target_booking__customer=request.user,
+            )
+            if offer.status == EarlierSlotOffer.STATUS_PENDING:
+                offer.status = EarlierSlotOffer.STATUS_DECLINED
+                offer.responded_at = timezone.now()
+                offer.save(update_fields=["status", "responded_at"])
+                offer_earlier_slot_to_next_customer(offer.source_booking)
+                messages.info(request, "You declined the earlier-time offer. Your booking is unchanged.")
+            target_booking_id = offer.target_booking_id
+        return redirect("booking_detail", pk=target_booking_id)
 
 
 class BookingDeleteView(AdminRequiredMixin, DeleteView):

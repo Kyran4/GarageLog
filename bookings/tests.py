@@ -53,6 +53,12 @@ class BookingFormTests(TestCase):
 
         self.assertTrue(form.is_valid(), form.errors)
 
+    def test_customer_can_opt_in_to_earlier_slot_offers(self):
+        form = self.make_form(earlier_slot_opt_in="on")
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertTrue(form.save(commit=False).earlier_slot_opt_in)
+
     def test_other_service_is_required(self):
         form = self.make_form(service_type="Other", other_service="")
 

@@ -15,6 +15,8 @@
     var pointerY = 0;
     var targetPointerX = 0;
     var targetPointerY = 0;
+    var pointerTargetActive = 0;
+    var pointerInfluence = 0;
     var pulseStart = 0;
     var pulseX = 0;
     var pulseY = 0;
@@ -70,13 +72,16 @@
 
         targetPointerX = insideSphere ? offsetX : 0;
         targetPointerY = insideSphere ? offsetY : 0;
+        pointerTargetActive = insideSphere ? 1 : 0;
         hero.style.cursor = insideSphere ? "pointer" : "";
 
         if (reducedMotion.matches) {
             pointerX = targetPointerX;
             pointerY = targetPointerY;
+            pointerInfluence = pointerTargetActive;
             hero.style.setProperty("--gl-hero-pointer-x", ((pointerX + 1) * 50) + "%");
             hero.style.setProperty("--gl-hero-pointer-y", ((pointerY + 1) * 50) + "%");
+            draw(0);
         }
 
         return insideSphere;
@@ -87,9 +92,12 @@
         var height = canvas.clientHeight;
         pointerX += (targetPointerX - pointerX) * 0.055;
         pointerY += (targetPointerY - pointerY) * 0.055;
+        pointerInfluence += (pointerTargetActive - pointerInfluence) * 0.08;
         var centerX = width / 2 + pointerX * width * 0.018;
         var centerY = height / 2 + pointerY * height * 0.018;
         var radius = Math.min(width, height) * 0.43;
+        var pointerFieldX = centerX + pointerX * radius * 0.84;
+        var pointerFieldY = centerY + pointerY * radius * 0.84;
         var rotation = (reducedMotion.matches ? 0 : time * 0.00012) + pointerX * 0.34;
         var tilt = 0.24 + pointerY * 0.18;
 
@@ -141,6 +149,13 @@
             var x = centerX + rotatedX * radius * perspective;
             var y = centerY + rotatedY * radius * perspective;
             var ripple = 0;
+            var pointerDistance = Math.hypot(x - pointerFieldX, y - pointerFieldY);
+            var pointerStrength = Math.max(0, 1 - pointerDistance / (radius * 0.34)) * pointerInfluence;
+            if (pointerStrength > 0) {
+                var pointerDisplacement = radius * 0.055 * pointerStrength / Math.max(pointerDistance, 1);
+                x += (x - pointerFieldX) * pointerDisplacement;
+                y += (y - pointerFieldY) * pointerDisplacement;
+            }
 
             if (pulseStart && pulseProgress >= 0) {
                 var distance = Math.hypot(x - pulseX, y - pulseY);
@@ -167,9 +182,9 @@
                 y: y,
                 depth: depth,
                 alpha: (0.18 + (depth + 1) * 0.34) * shimmer,
-                size: point.size * (0.72 + (depth + 1) * 0.3),
+                size: point.size * (0.72 + (depth + 1) * 0.3) + pointerStrength * 0.45,
                 warm: rotatedX * 0.5 + 0.5,
-                ripple: ripple
+                ripple: Math.max(ripple, pointerStrength * 0.38)
             });
         });
 
@@ -201,6 +216,7 @@
     hero.addEventListener("pointerleave", function () {
         targetPointerX = 0;
         targetPointerY = 0;
+        pointerTargetActive = 0;
         hero.style.cursor = "";
         if (reducedMotion.matches) updatePointer(-1, -1);
     });
