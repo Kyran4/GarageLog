@@ -534,6 +534,21 @@ def test_editing_a_custom_service_shows_it_as_other(client, customer, vehicle, m
     assert form['other_service'].value() == 'Air con regas'
 
 
+def test_mechanic_booking_form_hides_customer_only_and_unsuitable_options(
+    client, mechanic, customer, vehicle, make_booking,
+):
+    booking = make_booking(customer, vehicle)
+    client.force_login(mechanic)
+
+    edit = client.get(reverse('booking_edit', kwargs={'pk': booking.pk})).context['form']
+    create = client.get(reverse('create_booking')).context['form']
+
+    assert 'earlier_slot_opt_in' not in edit.fields
+    assert 'same_issue_returned' not in edit.fields
+    assert 'QUOTED' not in [value for value, _ in edit.fields['status'].choices]
+    assert [value for value, _ in create.fields['status'].choices] == ['PENDING', 'CONFIRMED']
+
+
 def test_customer_cannot_edit_a_booking_that_has_started(client, customer, vehicle, make_booking, open_day):
     booking = make_booking(customer, vehicle)
     client.force_login(customer)
@@ -1194,6 +1209,15 @@ def test_mechanic_can_record_vehicle_dropoff_checkin(
     assert booking.dropoff_checked_in_at is not None
     assert booking.dropoff_checked_in_by == mechanic
     assert booking.dropoff_issue == "Noise returns over 60 km/h"
+
+    page = client.get(reverse("booking_detail", kwargs={"pk": booking.pk}))
+    assert "Confirm drop-off check-in" not in page.content.decode()
+
+    client.post(reverse("booking_dropoff_checkin", kwargs={"pk": booking.pk}), {
+        "dropoff_contact": "changed",
+    })
+    booking.refresh_from_db()
+    assert booking.dropoff_contact == "021 555 0100"
 
 
 def test_dropoff_checkin_is_not_part_of_the_booking_form_or_customer_page(

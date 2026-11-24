@@ -741,6 +741,9 @@ class BookingDropoffCheckinView(BookingQuerysetMixin, View):
             or (request.user.is_mechanic and request.user.workshop_id == booking.workshop_id)
         ):
             raise PermissionDenied
+        if booking.dropoff_checked_in_at:
+            messages.error(request, "This vehicle has already been checked in.")
+            return redirect("booking_detail", pk=booking.pk)
         booking.dropoff_contact = request.POST.get("dropoff_contact", "").strip()
         booking.dropoff_details = request.POST.get("dropoff_details", "").strip()
         booking.dropoff_issue = request.POST.get("dropoff_issue", "").strip()
