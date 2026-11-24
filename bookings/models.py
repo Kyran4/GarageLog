@@ -60,6 +60,31 @@ class Booking(models.Model):
     booking_time = models.TimeField()
     earlier_slot_opt_in = models.BooleanField(default=False)
 
+    previous_booking = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="repeat_bookings",
+    )
+    same_issue_returned = models.BooleanField(default=False)
+
+    dropoff_contact = models.CharField(max_length=150, blank=True)
+    dropoff_details = models.TextField(blank=True)
+    dropoff_issue = models.TextField(blank=True)
+    dropoff_checked_in_at = models.DateTimeField(null=True, blank=True)
+    dropoff_checked_in_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="dropoff_checkins",
+    )
+
+    courtesy_vehicle_requested = models.BooleanField(default=False)
+    courtesy_vehicle_start = models.DateField(null=True, blank=True)
+    courtesy_vehicle_end = models.DateField(null=True, blank=True)
+
     service_type = models.CharField(max_length=100)
     notes = models.TextField(blank=True)
     quote_amount = models.DecimalField(
@@ -248,6 +273,83 @@ class EarlierSlotOffer(models.Model):
 
     def __str__(self):
         return f"Earlier slot offer for booking #{self.target_booking_id}"
+
+
+class CourtesyVehicle(models.Model):
+    workshop = models.ForeignKey(
+        "workshops.Workshop",
+        on_delete=models.PROTECT,
+        related_name="courtesy_vehicles",
+    )
+    plate = models.CharField(max_length=8, unique=True)
+    make = models.CharField(max_length=50)
+    model = models.CharField(max_length=50)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["plate"]
+
+    def __str__(self):
+        return f"{self.plate} - {self.make} {self.model}"
+
+
+class CourtesyReservation(models.Model):
+    STATUS_PENDING = "PENDING"
+    STATUS_ASSIGNED = "ASSIGNED"
+    STATUS_COLLECTED = "COLLECTED"
+    STATUS_RETURNED = "RETURNED"
+    STATUS_CANCELLED = "CANCELLED"
+
+    booking = models.OneToOneField(
+        Booking,
+        on_delete=models.CASCADE,
+        related_name="courtesy_reservation",
+    )
+    vehicle = models.ForeignKey(
+        CourtesyVehicle,
+        on_delete=models.PROTECT,
+        related_name="reservations",
+    )
+    start_date = models.DateField()
+    end_date = models.DateField()
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            (STATUS_PENDING, "Pending"),
+            (STATUS_ASSIGNED, "Assigned"),
+            (STATUS_COLLECTED, "Collected"),
+            (STATUS_RETURNED, "Returned"),
+            (STATUS_CANCELLED, "Cancelled"),
+        ],
+        default=STATUS_ASSIGNED,
+    )
+    assigned_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="courtesy_assignments",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["start_date", "end_date"]
+
+    def clean(self):
+        super().clean()
+        if self.end_date and self.start_date and self.end_date < self.start_date:
+            raise ValidationError({"end_date": "The return date cannot be before the collection date."})
+        if self.vehicle_id and self.booking_id:
+            if self.vehicle.workshop_id != self.booking.workshop_id:
+                raise ValidationError({"vehicle": "Choose a courtesy vehicle from this booking's workshop."})
+            clash = CourtesyReservation.objects.filter(
+                vehicle=self.vehicle,
+                status__in=[self.STATUS_PENDING, self.STATUS_ASSIGNED, self.STATUS_COLLECTED],
+                start_date__lte=self.end_date,
+                end_date__gte=self.start_date,
+            ).exclude(pk=self.pk)
+            if clash.exists():
+                raise ValidationError({"vehicle": "That courtesy vehicle is already reserved for those dates."})
 
 
 class BookingQuotePart(models.Model):

@@ -58,6 +58,12 @@
         {% if booking.job_card and user == booking.customer and booking.status == 'COMPLETED' %}
         <a class="btn btn-outline-primary" href="{% url 'jobcard_invoice' booking.job_card.pk %}">View invoice</a>
         {% endif %}
+        {% if booking.status == 'COMPLETED' %}
+        <form method="post" action="{% url 'booking_repeat' booking.pk %}" class="d-inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline-primary">Same issue has returned</button>
+        </form>
+        {% endif %}
     </div>
 </div>
 
@@ -86,6 +92,23 @@
     <dd class="col-sm-9">{% if booking.mechanic %}{{ booking.mechanic.get_full_name|default:booking.mechanic.username }}{% else %}<span class="text-body-secondary">Not assigned yet</span>{% endif %}</dd>
     <dt class="col-sm-3">Notes</dt>
     <dd class="col-sm-9">{{ booking.notes|default:"-"|linebreaksbr }}</dd>
+    <dt class="col-sm-3">Drop-off contact</dt>
+    <dd class="col-sm-9">{{ booking.dropoff_contact|default:"-" }}</dd>
+    <dt class="col-sm-3">Key / drop-off details</dt>
+    <dd class="col-sm-9">{{ booking.dropoff_details|default:"-"|linebreaksbr }}</dd>
+    <dt class="col-sm-3">Issue at drop-off</dt>
+    <dd class="col-sm-9">{{ booking.dropoff_issue|default:"-"|linebreaksbr }}</dd>
+    {% if booking.courtesy_vehicle_requested %}
+    <dt class="col-sm-3">Courtesy vehicle</dt>
+    <dd class="col-sm-9">
+        Requested
+        {% if booking.courtesy_vehicle_start %}from {{ booking.courtesy_vehicle_start|date:"j M Y" }}{% endif %}
+        {% if booking.courtesy_vehicle_end %}until {{ booking.courtesy_vehicle_end|date:"j M Y" }}{% endif %}
+        {% if booking.courtesy_reservation %}
+        &ndash; assigned {{ booking.courtesy_reservation.vehicle }}
+        {% endif %}
+    </dd>
+    {% endif %}
     {% if booking.quoted_at %}
     <dt class="col-sm-3">Quote</dt>
     <dd class="col-sm-9">
@@ -127,4 +150,68 @@
     </dd>
     {% endif %}
 </dl>
+
+{% if booking.previous_booking %}
+<div class="alert alert-info" role="status">
+    <strong>Repeat visit.</strong>
+    This booking is linked to the previous repair:
+    <a href="{% url 'booking_detail' booking.previous_booking.pk %}">Booking #{{ booking.previous_booking.pk }}</a>.
+</div>
+{% endif %}
+
+{% if can_check_in %}
+<section class="card mb-4" aria-labelledby="dropoff-heading">
+    <div class="card-body">
+        <h2 class="h5" id="dropoff-heading">Vehicle drop-off check-in</h2>
+        {% if booking.dropoff_checked_in_at %}
+        <p class="text-body-secondary">Checked in {{ booking.dropoff_checked_in_at|date:"j M Y, g:i a" }}{% if booking.dropoff_checked_in_by %} by {{ booking.dropoff_checked_in_by.get_full_name|default:booking.dropoff_checked_in_by.username }}{% endif %}.</p>
+        {% endif %}
+        <form method="post" action="{% url 'booking_dropoff_checkin' booking.pk %}" class="row g-3">
+            {% csrf_token %}
+            <div class="col-md-6">
+                <label for="dropoff-contact" class="form-label">Confirmed contact number</label>
+                <input id="dropoff-contact" name="dropoff_contact" class="form-control" maxlength="150" value="{{ booking.dropoff_contact }}">
+            </div>
+            <div class="col-md-6">
+                <label for="dropoff-issue" class="form-label">Issue at drop-off</label>
+                <textarea id="dropoff-issue" name="dropoff_issue" class="form-control" rows="3">{{ booking.dropoff_issue }}</textarea>
+            </div>
+            <div class="col-12">
+                <label for="dropoff-details" class="form-label">Key and drop-off details</label>
+                <textarea id="dropoff-details" name="dropoff_details" class="form-control" rows="3">{{ booking.dropoff_details }}</textarea>
+            </div>
+            <div class="col-12"><button type="submit" class="btn btn-primary">Confirm drop-off check-in</button></div>
+        </form>
+    </div>
+</section>
+{% endif %}
+
+{% if booking.courtesy_vehicle_requested and can_check_in and not booking.courtesy_reservation and courtesy_vehicles %}
+<section class="card mb-4" aria-labelledby="courtesy-heading">
+    <div class="card-body">
+        <h2 class="h5" id="courtesy-heading">Assign courtesy vehicle</h2>
+        <form method="post" action="{% url 'booking_courtesy_assign' booking.pk %}" class="row g-3">
+            {% csrf_token %}
+            <div class="col-md-6">
+                <label for="courtesy-vehicle" class="form-label">Available vehicle</label>
+                <select id="courtesy-vehicle" name="courtesy_vehicle" class="form-select" required>
+                    <option value="">Select a vehicle</option>
+                    {% for vehicle in courtesy_vehicles %}
+                    <option value="{{ vehicle.pk }}">{{ vehicle }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="courtesy-start" class="form-label">Collection date</label>
+                <input id="courtesy-start" name="start_date" type="date" class="form-control" value="{{ booking.courtesy_vehicle_start|date:'Y-m-d' }}" required>
+            </div>
+            <div class="col-md-3">
+                <label for="courtesy-end" class="form-label">Return date</label>
+                <input id="courtesy-end" name="end_date" type="date" class="form-control" value="{{ booking.courtesy_vehicle_end|date:'Y-m-d' }}" required>
+            </div>
+            <div class="col-12"><button type="submit" class="btn btn-primary">Assign courtesy vehicle</button></div>
+        </form>
+    </div>
+</section>
+{% endif %}
 {% endblock %}
