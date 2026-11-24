@@ -58,6 +58,7 @@ class Booking(models.Model):
 
     booking_date = models.DateField()
     booking_time = models.TimeField()
+    earlier_slot_opt_in = models.BooleanField(default=False)
 
     service_type = models.CharField(max_length=100)
     notes = models.TextField(blank=True)
@@ -205,6 +206,48 @@ class Booking(models.Model):
             and self.quote_amount is not None
             and self.is_upcoming
         )
+
+
+class EarlierSlotOffer(models.Model):
+    STATUS_PENDING = "PENDING"
+    STATUS_ACCEPTED = "ACCEPTED"
+    STATUS_DECLINED = "DECLINED"
+    STATUS_UNAVAILABLE = "UNAVAILABLE"
+    STATUS_WITHDRAWN = "WITHDRAWN"
+
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Pending"),
+        (STATUS_ACCEPTED, "Accepted"),
+        (STATUS_DECLINED, "Declined"),
+        (STATUS_UNAVAILABLE, "Unavailable"),
+        (STATUS_WITHDRAWN, "Withdrawn"),
+    ]
+
+    source_booking = models.ForeignKey(
+        Booking,
+        on_delete=models.CASCADE,
+        related_name="offers_for_cancelled_slot",
+    )
+    target_booking = models.ForeignKey(
+        Booking,
+        on_delete=models.CASCADE,
+        related_name="earlier_slot_offers",
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    created_at = models.DateTimeField(auto_now_add=True)
+    responded_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["created_at", "pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["source_booking", "target_booking"],
+                name="unique_earlier_slot_offer_target",
+            ),
+        ]
+
+    def __str__(self):
+        return f"Earlier slot offer for booking #{self.target_booking_id}"
 
 
 class BookingQuotePart(models.Model):

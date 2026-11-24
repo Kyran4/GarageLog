@@ -5,11 +5,13 @@ import pytest
 from django.urls import reverse
 
 from accounts.models import User
+from notifications.models import Notification
 from . import scheduling
 from .models import (
     Booking,
     BookingQuoteLabour,
     BookingQuotePart,
+    EarlierSlotOffer,
     ServiceLabourRecommendation,
 )
 from .tests import frozen_now
@@ -563,6 +565,103 @@ def test_customer_cancels_booking_and_it_is_kept(client, customer, vehicle, make
     assert response.url == reverse('booking_list')
     booking.refresh_from_db()
     assert booking.status == 'CANCELLED'
+
+
+def test_cancellation_offers_earlier_slot_to_oldest_opted_in_booking(
+        client, customer, vehicle, make_user, make_vehicle, make_booking, open_day):
+    first_customer = make_user('first_customer')
+    first_vehicle = make_vehicle(first_customer, 'FIRST01')
+    first = make_booking(
+        first_customer, first_vehicle, time=datetime.time(12), earlier_slot_opt_in=True,
+    )
+    second_customer = make_user('second_customer')
+    second_vehicle = make_vehicle(second_customer, 'SECOND1')
+    make_booking(second_customer, second_vehicle, time=datetime.time(13), earlier_slot_opt_in=True)
+    cancelled = make_booking(customer, vehicle, time=datetime.time(10))
+
+    client.force_login(customer)
+    client.post(reverse('booking_cancel', kwargs={'pk': cancelled.pk}))
+
+    offer = EarlierSlotOffer.objects.get(source_booking=cancelled)
+    assert offer.target_booking == first
+    assert Notification.objects.filter(
+        recipient=first_customer,
+        booking=first,
+        message__contains='An earlier time is available',
+    ).exists()
+    client.force_login(first_customer)
+    detail = client.get(reverse('booking_detail', kwargs={'pk': first.pk}))
+    assert b'Accept earlier time' in detail.content
+
+
+def test_customer_accepts_earlier_slot_offer_and_moves_their_booking(
+        client, customer, vehicle, make_user, make_vehicle, make_booking):
+    target_customer = make_user('target_customer')
+    target_vehicle = make_vehicle(target_customer, 'TARGET01')
+    target = make_booking(
+        target_customer, target_vehicle, time=datetime.time(12), earlier_slot_opt_in=True,
+    )
+    source = make_booking(customer, vehicle, time=datetime.time(10), status='CANCELLED')
+    offer = EarlierSlotOffer.objects.create(source_booking=source, target_booking=target)
+
+    client.force_login(target_customer)
+    response = client.post(reverse('booking_earlier_slot_accept', kwargs={'offer_pk': offer.pk}))
+
+    assert response.status_code == 302
+    target.refresh_from_db()
+    offer.refresh_from_db()
+    assert (target.booking_time, offer.status) == (
+        datetime.time(10), EarlierSlotOffer.STATUS_ACCEPTED,
+    )
+
+
+def test_declining_earlier_slot_offer_notifies_the_next_booking_in_queue(
+        client, customer, vehicle, make_user, make_vehicle, make_booking):
+    first_customer = make_user('first_customer')
+    first = make_booking(
+        first_customer, make_vehicle(first_customer, 'FIRST01'),
+        time=datetime.time(12), earlier_slot_opt_in=True,
+    )
+    second_customer = make_user('second_customer')
+    second = make_booking(
+        second_customer, make_vehicle(second_customer, 'SECOND1'),
+        time=datetime.time(13), earlier_slot_opt_in=True,
+    )
+    source = make_booking(customer, vehicle, time=datetime.time(10))
+    source.status = 'CANCELLED'
+    source.save(update_fields=['status'])
+    first_offer = EarlierSlotOffer.objects.get(source_booking=source, target_booking=first)
+
+    client.force_login(first_customer)
+    client.post(reverse('booking_earlier_slot_decline', kwargs={'offer_pk': first_offer.pk}))
+
+    first_offer.refresh_from_db()
+    second_offer = EarlierSlotOffer.objects.get(source_booking=source, target_booking=second)
+    assert first_offer.status == EarlierSlotOffer.STATUS_DECLINED
+    assert second_offer.status == EarlierSlotOffer.STATUS_PENDING
+    assert Notification.objects.filter(recipient=second_customer, booking=second).exists()
+
+
+def test_accepting_filled_earlier_slot_leaves_existing_booking_unchanged(
+        client, customer, vehicle, make_user, make_vehicle, make_booking):
+    target_customer = make_user('target_customer')
+    target_vehicle = make_vehicle(target_customer, 'TARGET01')
+    target = make_booking(
+        target_customer, target_vehicle, time=datetime.time(12), earlier_slot_opt_in=True,
+    )
+    source = make_booking(customer, vehicle, time=datetime.time(10), status='CANCELLED')
+    offer = EarlierSlotOffer.objects.create(source_booking=source, target_booking=target)
+    other_customer = make_user('other_customer')
+    make_booking(other_customer, make_vehicle(other_customer, 'OTHER01'), time=datetime.time(10))
+
+    client.force_login(target_customer)
+    response = client.post(reverse('booking_earlier_slot_accept', kwargs={'offer_pk': offer.pk}))
+
+    assert response.status_code == 302
+    target.refresh_from_db()
+    offer.refresh_from_db()
+    assert target.booking_time == datetime.time(12)
+    assert offer.status == EarlierSlotOffer.STATUS_UNAVAILABLE
 
 
 def test_cancelled_booking_cannot_be_cancelled_again(client, customer, vehicle, make_booking):

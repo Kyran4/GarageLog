@@ -92,6 +92,13 @@ class BookingForm(BootstrapFormMixin, forms.ModelForm):
                   f"next to its name.",
     )
 
+    earlier_slot_opt_in = forms.BooleanField(
+        label="Notify me if an earlier time becomes available",
+        required=False,
+        help_text="If someone cancels an earlier booking at this workshop on the same day, "
+                  "we'll offer you that time.",
+    )
+
     service_type = forms.ChoiceField(
         choices=SERVICE_CHOICES
     )
@@ -113,6 +120,7 @@ class BookingForm(BootstrapFormMixin, forms.ModelForm):
             "vehicle",
             "booking_date",
             "booking_time",
+            "earlier_slot_opt_in",
             "service_type",
             "notes",
         ]
