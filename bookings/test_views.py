@@ -1195,6 +1195,15 @@ def test_mechanic_can_record_vehicle_dropoff_checkin(
     assert booking.dropoff_checked_in_by == mechanic
     assert booking.dropoff_issue == "Noise returns over 60 km/h"
 
+    page = client.get(reverse("booking_detail", kwargs={"pk": booking.pk}))
+    assert "Confirm drop-off check-in" not in page.content.decode()
+
+    client.post(reverse("booking_dropoff_checkin", kwargs={"pk": booking.pk}), {
+        "dropoff_contact": "changed",
+    })
+    booking.refresh_from_db()
+    assert booking.dropoff_contact == "021 555 0100"
+
 
 def test_dropoff_checkin_is_not_part_of_the_booking_form_or_customer_page(
         client, customer, mechanic, vehicle, make_booking):

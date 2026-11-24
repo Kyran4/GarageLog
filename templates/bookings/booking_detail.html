@@ -167,6 +167,7 @@
             {% if booking.dropoff_details %}<dt class="col-sm-3">Key / drop-off details</dt><dd class="col-sm-9">{{ booking.dropoff_details|linebreaksbr }}</dd>{% endif %}
         </dl>
         {% endif %}
+        {% if not booking.dropoff_checked_in_at %}
         <form method="post" action="{% url 'booking_dropoff_checkin' booking.pk %}" class="row g-3">
             {% csrf_token %}
             <div class="col-md-6">
@@ -183,6 +184,7 @@
             </div>
             <div class="col-12"><button type="submit" class="btn btn-primary">Confirm drop-off check-in</button></div>
         </form>
+                    {% endif %}
     </div>
 </section>
 {% endif %}
