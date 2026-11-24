@@ -11,6 +11,8 @@ from .models import (
     Booking,
     BookingQuoteLabour,
     BookingQuotePart,
+    CourtesyReservation,
+    CourtesyVehicle,
     EarlierSlotOffer,
     ServiceLabourRecommendation,
 )
@@ -1154,3 +1156,76 @@ def test_an_admin_can_move_an_old_warehouse_booking_to_a_real_workshop(
     assert response.status_code == 302
     old.refresh_from_db()
     assert old.workshop == workshop
+
+
+# ---------------------------------------------------------------- repeat visits, drop-off and courtesy vehicles
+
+
+def test_completed_booking_can_open_a_linked_repeat_booking(
+        client, customer, vehicle, workshop, make_booking, booking_data):
+    previous = make_booking(customer, vehicle, workshop=workshop, status="COMPLETED")
+    client.force_login(customer)
+
+    response = client.post(reverse("booking_repeat", kwargs={"pk": previous.pk}))
+
+    assert response.status_code == 302
+    assert f"repeat={previous.pk}" in response.url
+    form = client.get(response.url).context["form"]
+    assert form["same_issue_returned"].value() is True
+    assert form["vehicle"].value() == vehicle.pk
+
+
+def test_mechanic_can_record_vehicle_dropoff_checkin(
+        client, mechanic, customer, vehicle, make_booking):
+    booking = make_booking(customer, vehicle, mechanic=mechanic)
+    client.force_login(mechanic)
+
+    page = client.get(reverse("booking_detail", kwargs={"pk": booking.pk}))
+    assert "Confirmed contact number" in page.content.decode()
+
+    response = client.post(reverse("booking_dropoff_checkin", kwargs={"pk": booking.pk}), {
+        "dropoff_contact": "021 555 0100",
+        "dropoff_details": "Keys in the drop-box",
+        "dropoff_issue": "Noise returns over 60 km/h",
+    })
+
+    booking.refresh_from_db()
+    assert response.status_code == 302
+    assert booking.dropoff_checked_in_at is not None
+    assert booking.dropoff_checked_in_by == mechanic
+    assert booking.dropoff_issue == "Noise returns over 60 km/h"
+
+
+def test_dropoff_checkin_is_not_part_of_the_booking_form_or_customer_page(
+        client, customer, mechanic, vehicle, make_booking):
+    booking = make_booking(customer, vehicle, mechanic=mechanic)
+    client.force_login(customer)
+
+    form_page = client.get(reverse("create_booking"))
+    assert not {"dropoff_contact", "dropoff_details", "dropoff_issue"} & set(
+        form_page.context["form"].fields
+    )
+    detail_page = client.get(reverse("booking_detail", kwargs={"pk": booking.pk}))
+    assert "Confirmed contact number" not in detail_page.content.decode()
+
+
+def test_mechanic_can_assign_available_courtesy_vehicle(
+        client, mechanic, customer, vehicle, workshop, make_booking):
+    booking = make_booking(customer, vehicle, mechanic=mechanic, status="CONFIRMED")
+    courtesy = CourtesyVehicle.objects.create(
+        workshop=workshop,
+        plate="COUR123",
+        make="Toyota",
+        model="Corolla",
+    )
+    client.force_login(mechanic)
+
+    response = client.post(reverse("booking_courtesy_assign", kwargs={"pk": booking.pk}), {
+        "courtesy_vehicle": courtesy.pk,
+        "start_date": "2027-01-10",
+        "end_date": "2027-01-12",
+    })
+
+    booking.refresh_from_db()
+    assert response.status_code == 302
+    assert booking.courtesy_reservation.vehicle == courtesy

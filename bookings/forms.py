@@ -99,6 +99,26 @@ class BookingForm(BootstrapFormMixin, forms.ModelForm):
                   "we'll offer you that time.",
     )
 
+    same_issue_returned = forms.BooleanField(
+        label="Same issue has returned",
+        required=False,
+        help_text="Link this booking to the previous repair so the mechanic can review what was tried.",
+    )
+    courtesy_vehicle_requested = forms.BooleanField(
+        label="Request a courtesy vehicle",
+        required=False,
+    )
+    courtesy_vehicle_start = forms.DateField(
+        label="Courtesy vehicle from",
+        required=False,
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
+    courtesy_vehicle_end = forms.DateField(
+        label="Courtesy vehicle until",
+        required=False,
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
+
     service_type = forms.ChoiceField(
         choices=SERVICE_CHOICES
     )
@@ -123,6 +143,10 @@ class BookingForm(BootstrapFormMixin, forms.ModelForm):
             "earlier_slot_opt_in",
             "service_type",
             "notes",
+            "same_issue_returned",
+            "courtesy_vehicle_requested",
+            "courtesy_vehicle_start",
+            "courtesy_vehicle_end",
         ]
 
         widgets = {
@@ -202,6 +226,17 @@ class BookingForm(BootstrapFormMixin, forms.ModelForm):
     def clean(self):
         cleaned_data = super().clean()
 
+        requested = cleaned_data.get("courtesy_vehicle_requested")
+        start = cleaned_data.get("courtesy_vehicle_start")
+        end = cleaned_data.get("courtesy_vehicle_end")
+        if requested:
+            if not start:
+                self.add_error("courtesy_vehicle_start", "Enter the date you need the courtesy vehicle.")
+            if not end:
+                self.add_error("courtesy_vehicle_end", "Enter the date you will return the courtesy vehicle.")
+            if start and end and end < start:
+                self.add_error("courtesy_vehicle_end", "The return date cannot be before the collection date.")
+
         service = cleaned_data.get("service_type")
         other = (cleaned_data.get("other_service") or "").strip()
 
@@ -274,6 +309,8 @@ class StaffBookingForm(BookingForm):
         fields = [
             "customer", "workshop", "vehicle", "booking_date", "booking_time", "service_type",
             "notes", "mechanic", "status",
+            "same_issue_returned",
+            "courtesy_vehicle_requested", "courtesy_vehicle_start", "courtesy_vehicle_end",
         ]
 
     def __init__(self, *args, user=None, **kwargs):

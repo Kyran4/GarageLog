@@ -5,7 +5,7 @@ from decimal import Decimal
 from django import forms
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse, reverse_lazy
@@ -31,6 +31,8 @@ from .models import (
     Booking,
     BookingQuoteLabour,
     BookingQuotePart,
+    CourtesyReservation,
+    CourtesyVehicle,
     EarlierSlotOffer,
     ServiceLabourRecommendation,
 )
@@ -201,6 +203,14 @@ class BookingDetailView(BookingQuerysetMixin, DetailView):
             if user.pk == self.object.customer_id
             else EarlierSlotOffer.objects.none()
         )
+        context["can_check_in"] = (
+            user.is_admin_role
+            or (user.is_mechanic and user.workshop_id == self.object.workshop_id)
+        )
+        context["courtesy_vehicles"] = CourtesyVehicle.objects.filter(
+            workshop=self.object.workshop,
+            is_active=True,
+        ).order_by("plate")
         return context
 
 
@@ -273,11 +283,30 @@ class BookingCreateView(BookingSaveMixin, RoleRequiredMixin, CreateView):
                 owner_id = Vehicle.objects.filter(pk=vehicle_id).values_list("owner_id", flat=True).first()
                 if owner_id:
                     initial["customer"] = owner_id
+        repeat_id = self.request.GET.get("repeat")
+        if repeat_id and repeat_id.isdigit():
+            previous = Booking.objects.filter(
+                pk=repeat_id,
+                status="COMPLETED",
+            )
+            if self.request.user.is_customer:
+                previous = previous.filter(customer=self.request.user)
+            previous = previous.select_related("vehicle", "workshop").first()
+            if previous:
+                initial["vehicle"] = previous.vehicle_id
+                initial["workshop"] = previous.workshop_id
+                initial["service_type"] = previous.service_type
+                initial["notes"] = previous.notes
+                initial["same_issue_returned"] = True
+                self.repeat_booking = previous
         return initial
 
     def form_valid(self, form):
         if self.request.user.is_customer:
             form.instance.customer = self.request.user
+        previous = getattr(self, "repeat_booking", None)
+        if previous and form.cleaned_data.get("same_issue_returned"):
+            form.instance.previous_booking = previous
         if not self.save_booking(form):
             return self.form_invalid(form)
         messages.success(self.request, "Your booking has been requested. We'll confirm it shortly."
@@ -691,6 +720,92 @@ class EarlierSlotOfferDeclineView(LoginRequiredMixin, View):
                 messages.info(request, "You declined the earlier-time offer. Your booking is unchanged.")
             target_booking_id = offer.target_booking_id
         return redirect("booking_detail", pk=target_booking_id)
+
+
+class BookingRepeatView(BookingQuerysetMixin, View):
+    """Open a repeat booking from a completed repair."""
+
+    def post(self, request, pk):
+        previous = get_object_or_404(self.get_queryset(), pk=pk, status="COMPLETED")
+        params = f"?repeat={previous.pk}"
+        if previous.vehicle_id:
+            params += f"&vehicle={previous.vehicle_id}"
+        return redirect(f"{reverse('create_booking')}{params}")
+
+
+class BookingDropoffCheckinView(BookingQuerysetMixin, View):
+    def post(self, request, pk):
+        booking = get_object_or_404(self.get_queryset(), pk=pk)
+        if not (
+            request.user.is_admin_role
+            or (request.user.is_mechanic and request.user.workshop_id == booking.workshop_id)
+        ):
+            raise PermissionDenied
+        booking.dropoff_contact = request.POST.get("dropoff_contact", "").strip()
+        booking.dropoff_details = request.POST.get("dropoff_details", "").strip()
+        booking.dropoff_issue = request.POST.get("dropoff_issue", "").strip()
+        booking.dropoff_checked_in_at = timezone.now()
+        booking.dropoff_checked_in_by = request.user
+        booking.save(update_fields=[
+            "dropoff_contact",
+            "dropoff_details",
+            "dropoff_issue",
+            "dropoff_checked_in_at",
+            "dropoff_checked_in_by",
+        ])
+        messages.success(request, "Vehicle drop-off check-in recorded.")
+        return redirect("booking_detail", pk=booking.pk)
+
+
+class BookingCourtesyAssignView(BookingQuerysetMixin, View):
+    def post(self, request, pk):
+        booking = get_object_or_404(self.get_queryset(), pk=pk)
+        if not (
+            request.user.is_admin_role
+            or (request.user.is_mechanic and request.user.workshop_id == booking.workshop_id)
+        ):
+            raise PermissionDenied
+        vehicle = get_object_or_404(
+            CourtesyVehicle,
+            pk=request.POST.get("courtesy_vehicle"),
+            workshop=booking.workshop,
+            is_active=True,
+        )
+        try:
+            start_date = datetime.datetime.strptime(
+                request.POST.get("start_date") or "", "%Y-%m-%d"
+            ).date()
+            end_date = datetime.datetime.strptime(
+                request.POST.get("end_date") or "", "%Y-%m-%d"
+            ).date()
+        except ValueError:
+            messages.error(request, "Enter valid courtesy vehicle collection and return dates.")
+            return redirect("booking_detail", pk=booking.pk)
+
+        reservation = CourtesyReservation(
+            booking=booking,
+            vehicle=vehicle,
+            start_date=start_date,
+            end_date=end_date,
+            assigned_by=request.user,
+        )
+        try:
+            reservation.full_clean()
+        except ValidationError as exc:
+            message = next(iter(exc.message_dict.values()))[0]
+            messages.error(request, message)
+            return redirect("booking_detail", pk=booking.pk)
+        reservation.save()
+        booking.courtesy_vehicle_requested = True
+        booking.courtesy_vehicle_start = start_date
+        booking.courtesy_vehicle_end = end_date
+        booking.save(update_fields=[
+            "courtesy_vehicle_requested",
+            "courtesy_vehicle_start",
+            "courtesy_vehicle_end",
+        ])
+        messages.success(request, f"Courtesy vehicle {vehicle.plate} has been assigned.")
+        return redirect("booking_detail", pk=booking.pk)
 
 
 class BookingDeleteView(AdminRequiredMixin, DeleteView):
