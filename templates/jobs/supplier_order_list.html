@@ -11,6 +11,38 @@
     <a class="btn btn-primary" href="{% url 'supplier_stock_order_create' %}">Order stock from supplier</a>
 </div>
 
+<section class="mb-5" aria-labelledby="job-requests-heading">
+    <h2 class="h4" id="job-requests-heading">Job-card part requests awaiting approval</h2>
+    {% if pending_job_requests %}
+    <div class="table-responsive">
+        <table class="table table-striped align-middle">
+            <thead><tr><th scope="col">Part</th><th scope="col">Job</th><th scope="col">Workshop</th><th scope="col">Quantity</th><th scope="col">Mechanic</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+            <tbody>
+                {% for item in pending_job_requests %}
+                <tr>
+                    <th scope="row">{% if item.part %}{{ item.part.part_number }} — {% endif %}{{ item.name }}</th>
+                    <td>#{{ item.job_card_id }}</td>
+                    <td>{{ item.job_card.booking.workshop.name }}</td>
+                    <td>{{ item.quantity }}</td>
+                    <td>{{ item.job_card.mechanic.get_full_name|default:item.job_card.mechanic.username }}</td>
+                    <td class="text-end text-nowrap">
+                        {% if can_process_stock_transfers %}
+                        <form method="post" action="{% url 'job_part_request_approve' item.pk %}" class="d-inline">
+                            {% csrf_token %}<button type="submit" class="btn btn-sm btn-primary">Approve</button>
+                        </form>
+                        <form method="post" action="{% url 'job_part_request_reject' item.pk %}" class="d-inline">
+                            {% csrf_token %}<button type="submit" class="btn btn-sm btn-outline-danger">Reject</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}<p>No job-card part requests are awaiting approval.</p>{% endif %}
+</section>
+
 <section class="mb-5" aria-labelledby="backorders-heading">
     <h2 class="h4" id="backorders-heading">Backorders awaiting supplier orders</h2>
     {% if backorders %}

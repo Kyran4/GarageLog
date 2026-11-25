@@ -59,7 +59,7 @@ def add_request_quantities(parts, workshop, user):
     job_parts = JobPart.objects.filter(
         part__in=parts,
         source=JobPart.Source.WAREHOUSE,
-        supply_status__in=[JobPart.SupplyStatus.BACKORDERED, JobPart.SupplyStatus.ON_ORDER],
+        supply_status__in=[JobPart.SupplyStatus.PENDING, JobPart.SupplyStatus.BACKORDERED, JobPart.SupplyStatus.ON_ORDER],
     )
     if not workshop.is_parts_warehouse:
         transfers = transfers.filter(workshop=workshop)

@@ -44,8 +44,12 @@ class JobCard(models.Model):
         return f"Job Card #{self.id} - {self.booking.service_type}"
 
     @property
+    def invoice_parts(self):
+        return [item for item in self.parts.all() if item.supply_status != JobPart.SupplyStatus.REJECTED]
+
+    @property
     def parts_total(self):
-        return sum((item.line_total + item.freight_charge for item in self.parts.all()), Decimal("0.00"))
+        return sum((item.line_total + item.freight_charge for item in self.invoice_parts), Decimal("0.00"))
 
     @property
     def invoice_total(self):
@@ -63,6 +67,8 @@ class JobPart(models.Model):
 
     class SupplyStatus(models.TextChoices):
         READY = "READY", "Ready"
+        PENDING = "PENDING", "Pending warehouse approval"
+        REJECTED = "REJECTED", "Rejected by warehouse"
         BACKORDERED = "BACKORDERED", "Backordered"
         ON_ORDER = "ON_ORDER", "On supplier order"
 

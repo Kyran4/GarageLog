@@ -256,6 +256,25 @@ def test_job_card_does_not_transfer_an_unaccepted_quote(
     assert stock.quantity == 5
 
 
+def test_accepted_quote_shortfall_creates_pending_warehouse_request(
+        client, admin_user, confirmed_booking, mechanic, make_part, make_stock):
+    part = make_part()
+    stock = make_stock(mechanic.workshop, part, quantity=0)
+    BookingQuotePart.objects.create(booking=confirmed_booking, stock_item=stock, quantity=2, unit_price="10.00")
+    confirmed_booking.quote_accepted_at = timezone.now()
+    confirmed_booking.save(update_fields=["quote_accepted_at"])
+    client.force_login(admin_user)
+
+    client.post(create_url(confirmed_booking))
+
+    item = JobCard.objects.get(booking=confirmed_booking).parts.get(part=part)
+    assert item.source == JobPart.Source.WAREHOUSE
+    assert item.supply_status == JobPart.SupplyStatus.PENDING
+    assert item.stock_item is None
+    stock.refresh_from_db()
+    assert stock.quantity == 0
+
+
 # ---------------------------------------------------------------- the buttons on the booking pages
 
 def test_booking_page_shows_the_create_button_to_staff_only(client, admin_user, customer, confirmed_booking):

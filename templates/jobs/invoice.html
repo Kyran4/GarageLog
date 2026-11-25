@@ -59,7 +59,7 @@
                 <thead><tr><th>Description</th><th class="text-end">Qty</th><th class="text-end">Unit price</th><th class="text-end">Total</th></tr></thead>
                 <tbody>
                     <tr><td>Labour</td><td class="text-end">1</td><td class="text-end">${{ job_card.labor_charge }}</td><td class="text-end">${{ job_card.labor_charge }}</td></tr>
-                    {% for part in job_card.parts.all %}
+                    {% for part in job_card.invoice_parts %}
                     <tr><td>{{ part.name }}</td><td class="text-end">{{ part.quantity }}</td><td class="text-end">${{ part.unit_price }}</td><td class="text-end">${{ part.line_total }}</td></tr>
                     {% if part.freight_charge %}
                     <tr><td>{{ part.freight_description }}: {{ part.name }}</td><td class="text-end">1</td><td class="text-end">${{ part.freight_charge }}</td><td class="text-end">${{ part.freight_charge }}</td></tr>

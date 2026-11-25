@@ -1,7 +1,11 @@
 import datetime
+from importlib import import_module
 from decimal import Decimal
+from types import SimpleNamespace
 
 import pytest
+from django.apps import apps
+from django.db import connection
 from django.urls import reverse
 from django.utils import timezone
 
@@ -373,10 +377,10 @@ def test_warehouse_part_defaults_freight_and_includes_it_in_customer_invoice(
     assert response.status_code == 302
     item = JobPart.objects.get(job_card=job_card)
     assert item.source == JobPart.Source.WAREHOUSE
-    assert item.supply_status == JobPart.SupplyStatus.READY
+    assert item.supply_status == JobPart.SupplyStatus.PENDING
     assert item.unit_price == Decimal("14.00")
     assert item.freight_charge == Decimal("12.99")
-    assert warehouse.stock.get(part=part).quantity == 3
+    assert warehouse.stock.get(part=part).quantity == 5
     assert job_card.invoice_total == Decimal("85.99")
 
     job_card.booking.status = "COMPLETED"
@@ -392,7 +396,127 @@ def test_warehouse_part_defaults_freight_and_includes_it_in_customer_invoice(
     assert b"12.99" in exported.content
 
 
-def test_warehouse_part_without_stock_becomes_backorder_and_is_supplier_ordered(
+def test_warehouse_job_request_requires_worker_approval_and_allocates_stock_once(
+    client, job_card, make_part, make_stock, warehouse, warehouse_staff, admin_user, customer,
+):
+    part = make_part()
+    stock = make_stock(warehouse, part, quantity=5)
+    client.force_login(job_card.mechanic)
+    client.post(reverse("jobcard_part_add", args=[job_card.pk]), {
+        "part": part.pk, "source": "WAREHOUSE", "quantity": 2,
+    })
+    item = JobPart.objects.get(job_card=job_card)
+    assert item.supply_status == JobPart.SupplyStatus.PENDING
+    assert item.stock_item is None
+    stock.refresh_from_db()
+    assert stock.quantity == 5
+    assert b"Pending warehouse approval" in client.get(reverse("jobcard_detail", args=[job_card.pk])).content
+    assert b"Job parts requested: 2" in client.get(reverse("inventory:search")).content
+
+    approve = reverse("job_part_request_approve", args=[item.pk])
+    reject = reverse("job_part_request_reject", args=[item.pk])
+    for user in (job_card.mechanic, admin_user, customer):
+        client.force_login(user)
+        assert client.post(approve).status_code == 403
+        assert client.post(reject).status_code == 403
+    client.force_login(admin_user)
+    assert approve not in client.get(reverse("supplier_order_list")).content.decode()
+    client.force_login(warehouse_staff)
+    body = client.get(reverse("supplier_order_list")).content.decode()
+    assert approve in body and reject in body
+    assert client.post(approve).status_code == 302
+    item.refresh_from_db()
+    stock.refresh_from_db()
+    assert item.supply_status == JobPart.SupplyStatus.READY
+    assert item.stock_item == stock
+    assert stock.quantity == 3
+    client.post(approve)
+    client.post(reject)
+    stock.refresh_from_db()
+    item.refresh_from_db()
+    assert stock.quantity == 3
+    assert item.supply_status == JobPart.SupplyStatus.READY
+    client.force_login(job_card.mechanic)
+    assert b"Job parts requested: 2" not in client.get(reverse("inventory:search")).content
+    client.post(reverse("jobcard_part_remove", args=[job_card.pk, item.pk]))
+    stock.refresh_from_db()
+    assert stock.quantity == 5
+
+
+def test_unavailable_job_request_waits_for_stock_or_can_be_rejected(
+    client, job_card, make_part, make_stock, warehouse, warehouse_staff,
+):
+    part = make_part()
+    stock = make_stock(warehouse, part, quantity=1)
+    client.force_login(job_card.mechanic)
+    client.post(reverse("jobcard_part_add", args=[job_card.pk]), {
+        "part": part.pk, "source": "WAREHOUSE", "quantity": 2,
+    })
+    item = JobPart.objects.get(job_card=job_card)
+    client.force_login(warehouse_staff)
+    response = client.post(reverse("job_part_request_approve", args=[item.pk]), follow=True)
+    assert b"only 1" in response.content
+    stock.refresh_from_db()
+    item.refresh_from_db()
+    assert stock.quantity == 1
+    assert item.supply_status == JobPart.SupplyStatus.PENDING
+    assert item.stock_item is None
+    client.post(reverse("job_part_request_reject", args=[item.pk]))
+    item.refresh_from_db()
+    stock.refresh_from_db()
+    assert item.supply_status == JobPart.SupplyStatus.REJECTED
+    assert stock.quantity == 1
+    client.post(reverse("job_part_request_approve", args=[item.pk]))
+    item.refresh_from_db()
+    assert item.supply_status == JobPart.SupplyStatus.REJECTED
+    client.force_login(job_card.mechanic)
+    assert b"Rejected by warehouse" in client.get(reverse("inventory:requests")).content
+    assert b"Job parts requested: 2" not in client.get(reverse("inventory:search")).content
+    job_card.refresh_from_db()
+    assert job_card.invoice_total == Decimal("45.00")
+    assert part.name.encode() not in client.get(reverse("jobcard_invoice", args=[job_card.pk])).content
+    assert part.name.encode() not in client.get(reverse("jobcard_invoice_export", args=[job_card.pk])).content
+    client.post(reverse("jobcard_part_remove", args=[job_card.pk, item.pk]))
+    assert not JobPart.objects.filter(pk=item.pk).exists()
+
+    client.post(reverse("jobcard_part_add", args=[job_card.pk]), {
+        "part": part.pk, "source": "WAREHOUSE", "quantity": 2,
+    })
+    item = JobPart.objects.get(job_card=job_card)
+    stock.quantity = 3
+    stock.save(update_fields=["quantity"])
+    client.force_login(warehouse_staff)
+    client.post(reverse("job_part_request_approve", args=[item.pk]))
+    item.refresh_from_db()
+    stock.refresh_from_db()
+    assert item.supply_status == JobPart.SupplyStatus.READY
+    assert stock.quantity == 1
+
+
+def test_existing_unordered_backorders_become_pending_without_changing_supplier_orders(
+    job_card, make_part, warehouse_staff,
+):
+    part = make_part()
+    backorder = JobPart.objects.create(
+        job_card=job_card, part=part, name=part.name, source=JobPart.Source.WAREHOUSE,
+        supply_status=JobPart.SupplyStatus.BACKORDERED, unit_price=10,
+    )
+    ordered = JobPart.objects.create(
+        job_card=job_card, part=part, name=part.name, source=JobPart.Source.WAREHOUSE,
+        supply_status=JobPart.SupplyStatus.ON_ORDER, unit_price=10,
+    )
+    SupplierOrder.objects.create(
+        job_part=ordered, part=part, supplier="Supplier", unit_cost=5, ordered_by=warehouse_staff,
+    )
+    migration = import_module("jobs.migrations.0010_alter_jobpart_supply_status")
+    migration.pending_unordered_backorders(apps, SimpleNamespace(connection=connection))
+    backorder.refresh_from_db()
+    ordered.refresh_from_db()
+    assert backorder.supply_status == JobPart.SupplyStatus.PENDING
+    assert ordered.supply_status == JobPart.SupplyStatus.ON_ORDER
+
+
+def test_legacy_backorder_is_supplier_ordered(
     client, job_card, make_part, warehouse, warehouse_staff
 ):
     part = make_part(part_number="BACK-1", name="Backordered filter")
@@ -408,10 +532,12 @@ def test_warehouse_part_without_stock_becomes_backorder_and_is_supplier_ordered(
     })
     assert response.status_code == 302
     job_part = JobPart.objects.get(job_card=job_card)
-    assert job_part.supply_status == JobPart.SupplyStatus.BACKORDERED
+    assert job_part.supply_status == JobPart.SupplyStatus.PENDING
     assert job_part.source == JobPart.Source.WAREHOUSE
     assert job_part.stock_item is None
     assert not warehouse.stock.filter(part=part).exists()
+    job_part.supply_status = JobPart.SupplyStatus.BACKORDERED
+    job_part.save(update_fields=["supply_status"])
 
     orders_url = reverse("supplier_order_list")
     assert client.get(orders_url).status_code == 403
@@ -465,6 +591,8 @@ def test_backorder_receipt_does_not_complete_when_supplied_quantity_is_insuffici
     })
     assert response.status_code == 302
     job_part = JobPart.objects.get(job_card=job_card)
+    job_part.supply_status = JobPart.SupplyStatus.BACKORDERED
+    job_part.save(update_fields=["supply_status"])
 
     client.force_login(warehouse_staff)
     order_url = reverse("supplier_order_create", kwargs={"part_id": job_part.pk})
@@ -565,7 +693,7 @@ def test_warehouse_staff_can_order_catalogue_stock_and_receive_it(
     assert stock.quantity == 4
 
 
-def test_catalogue_parts_without_stock_are_automatically_backordered(
+def test_catalogue_parts_without_stock_await_warehouse_approval(
     client, job_card, make_part
 ):
     part = make_part()
@@ -583,7 +711,7 @@ def test_catalogue_parts_without_stock_are_automatically_backordered(
     assert response.status_code == 302
     item = JobPart.objects.get(job_card=job_card)
     assert item.source == JobPart.Source.WAREHOUSE
-    assert item.supply_status == JobPart.SupplyStatus.BACKORDERED
+    assert item.supply_status == JobPart.SupplyStatus.PENDING
     assert item.freight_charge == Decimal("12.99")
 
 
@@ -672,7 +800,7 @@ def test_stock_assignment_cannot_go_negative_and_removing_job_part_restores_it(
     assert stock.quantity == 1
     backorder = JobPart.objects.get(job_card=job_card)
     assert backorder.source == JobPart.Source.WAREHOUSE
-    assert backorder.supply_status == JobPart.SupplyStatus.BACKORDERED
+    assert backorder.supply_status == JobPart.SupplyStatus.PENDING
 
     data["quantity"] = "1"
     client.post(url, data)

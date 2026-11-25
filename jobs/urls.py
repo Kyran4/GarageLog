@@ -5,6 +5,8 @@ from . import views
 urlpatterns = [
     path("", views.JobCardListView.as_view(), name="jobcard_list"),
     path("supplier-orders/", views.SupplierOrderListView.as_view(), name="supplier_order_list"),
+    path("supplier-orders/job-requests/<int:part_id>/approve/", views.JobPartRequestDecisionView.as_view(), {"decision": "approve"}, name="job_part_request_approve"),
+    path("supplier-orders/job-requests/<int:part_id>/reject/", views.JobPartRequestDecisionView.as_view(), {"decision": "reject"}, name="job_part_request_reject"),
     path(
         "supplier-orders/backorders/<int:part_id>/order/",
         views.SupplierOrderCreateView.as_view(),
