@@ -88,13 +88,16 @@ class WarehouseStockTransferForm(BootstrapFormMixin, forms.Form):
     )
     quantity = forms.IntegerField(min_value=1, initial=1)
 
-    def __init__(self, *args, warehouse=None, **kwargs):
+    def __init__(self, *args, warehouse=None, user=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.warehouse = warehouse
         self.fields['workshop'].queryset = Workshop.objects.filter(
             is_active=True,
             is_parts_warehouse=False,
         )
+        if user is not None and user.is_mechanic:
+            self.fields['workshop'].queryset = self.fields['workshop'].queryset.filter(pk=user.workshop_id)
+            self.fields['workshop'].initial = user.workshop_id
         if warehouse is not None:
             self.fields['part'].queryset = Part.objects.filter(
                 is_active=True,

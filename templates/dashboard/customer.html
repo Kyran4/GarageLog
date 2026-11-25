@@ -14,7 +14,7 @@
 <div class="row g-3 mb-4">
     {% include 'dashboard/_link_card.html' with slug='vehicles' title='My vehicles' count=vehicle_count text='Your vehicles and their WoF and registration dates.' url=vehicles_url link_text='View vehicles' %}
     {% include 'dashboard/_link_card.html' with slug='bookings' title='Upcoming bookings' count=upcoming_count text='Services you have booked that have not happened yet.' url=bookings_url link_text='View bookings' %}
-    {% include 'dashboard/_link_card.html' with slug='history' title='Service history' count=completed_service_count text='Completed services for your vehicles.' url='#service-history' link_text='View recent history' %}
+    {% include 'dashboard/_link_card.html' with slug='history' title='Service history' count=completed_service_count text='Completed services for your vehicles.' url=history_url link_text='View vehicle service history' %}
 </div>
 
 <section aria-labelledby="history-heading" class="mb-4" id="service-history">
@@ -27,7 +27,7 @@
                 <strong>{{ booking.booking_date|date:"j M Y" }}</strong>
                 &ndash; {{ booking.service_type }}
                 {% if booking.vehicle %}
-                on <a href="{% url 'vehicles:detail' booking.vehicle.pk %}">{{ booking.vehicle.plate }} ({{ booking.vehicle.make }} {{ booking.vehicle.model }})</a>
+                on <a href="{% url 'vehicles:detail' booking.vehicle.pk %}#history-heading">{{ booking.vehicle.plate }} ({{ booking.vehicle.make }} {{ booking.vehicle.model }})</a>
                 {% endif %}
                 <span class="text-body-secondary">at {{ booking.workshop.name }}</span>
             </span>

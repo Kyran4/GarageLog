@@ -94,6 +94,7 @@ Mechanics update job cards for their assigned work; admins can manage all job ca
 - Appointments are fixed one-hour slots within each workshop's opening hours. Available capacity reflects the active mechanics at that workshop.
 - A vehicle and a mechanic can't be double-booked. Customers can't book in the past, and cancelled or completed appointments no longer use a slot.
 - Vehicle service history is retained alongside bookings. Completed services can be viewed as print-friendly summaries with invoices and recorded handover checks.
+- The customer dashboard's service history card links to a vehicle chooser, where each vehicle's history can be opened.
 - Customer dashboards highlight WoF and registration dates that are due soon or expired.
 
 ### Dashboard attention
@@ -116,6 +117,7 @@ The optional **parts warehouse** is the central store that supplies workshops:
 - It holds parts stock but **does not take customer bookings**, so it never appears in the workshop list when booking, and nobody can book there.
 - Warehouse staff manage its stock and see a stock-focused dashboard with no bookings.
 - Every workshop's mechanics can see what the warehouse holds, read-only, next to their own stock in the parts search and on a part's page, so they know what can be supplied. Only warehouse staff and admins can change the warehouse's stock.
+- Mechanics can request warehouse stock for their own active workshop; admins can request it for any active workshop. Warehouse staff approve or reject requests before stock moves.
 - Admins see the warehouse listed separately on their dashboard, with a link to its stock.
 
 ## Parts library

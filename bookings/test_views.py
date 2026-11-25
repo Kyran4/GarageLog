@@ -405,6 +405,8 @@ def test_booking_list_can_be_sorted_and_switches_to_month_calendar(
 
     assert list(ascending.context['bookings']) == [first, later, outside_month]
     assert list(descending.context['bookings']) == [outside_month, later, first]
+    assert b'onchange="this.form.submit()"' in ascending.content
+    assert b'<noscript><button type="submit" class="btn btn-outline-primary">Apply</button></noscript>' in ascending.content
     assert calendar_view.context['view_mode'] == 'calendar'
     assert list(calendar_view.context['bookings']) == [first, later]
     assert calendar_view.context['month_label'] == 'November 2026'

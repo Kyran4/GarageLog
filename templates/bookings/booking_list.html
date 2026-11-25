@@ -43,7 +43,7 @@
                 <option value="{{ value }}"{% if value == selected_sort %} selected{% endif %}>{{ label }}</option>
                 {% endfor %}
             </select>
-            <button type="submit" class="btn btn-outline-primary">Apply</button>
+            <noscript><button type="submit" class="btn btn-outline-primary">Apply</button></noscript>
         </form>
         {% else %}
         <nav class="d-flex align-items-center gap-2" aria-label="Calendar month">
