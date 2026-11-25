@@ -262,20 +262,29 @@ class StockCreateView(StaffOnlyMixin, WorkshopScopeMixin, CreateView):
         return context
 
 
-class WarehouseStockTransferView(RoleRequiredMixin, FormView):
-    allowed_roles = (User.Role.ADMIN,)
+class WarehouseStockTransferView(StaffOnlyMixin, FormView):
     form_class = WarehouseStockTransferForm
     template_name = 'inventory/stock_transfer_form.html'
+
+    def test_func(self):
+        user = self.request.user
+        return super().test_func() and (
+            user.is_admin_role
+            or (user.workshop_id and user.workshop.is_active and not user.workshop.is_parts_warehouse)
+        )
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs['warehouse'] = Workshop.get_warehouse()
+        kwargs['user'] = self.request.user
         return kwargs
 
     def get_initial(self):
         initial = super().get_initial()
         workshop_id = self.request.GET.get('workshop', '')
-        if workshop_id.isdigit():
+        if self.request.user.is_mechanic:
+            initial['workshop'] = self.request.user.workshop_id
+        elif workshop_id.isdigit():
             initial['workshop'] = workshop_id
         part_id = self.request.GET.get('part', '')
         if part_id.isdigit():
@@ -297,7 +306,7 @@ class WarehouseStockTransferView(RoleRequiredMixin, FormView):
             f'Resupply request submitted for {quantity} × {part.name} to {workshop.name}. '
             'Warehouse staff must approve it before stock is transferred.',
         )
-        return redirect('supplier_order_list')
+        return redirect('inventory:stock' if self.request.user.is_mechanic else 'supplier_order_list')
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

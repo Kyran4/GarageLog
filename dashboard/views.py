@@ -73,6 +73,7 @@ class CustomerDashboardView(CustomerRequiredMixin, TemplateView):
             if vehicle.wof_status in ('expired', 'soon') or vehicle.rego_status in ('expired', 'soon')
         ]
         context['vehicles_url'] = reverse('vehicles:list')
+        context['history_url'] = reverse('vehicles:list') + '?history=1'
         context['bookings_url'] = reverse('booking_list')
         return context
 

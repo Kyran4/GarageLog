@@ -97,6 +97,33 @@ def test_customer_only_sees_their_own_vehicles(client, customer, vehicle, make_u
         assert client.get(reverse(url_name, kwargs={'pk': theirs.pk})).status_code == 404
 
 
+def test_customer_history_vehicle_chooser_links_to_each_owned_vehicles_history(
+        client, customer, vehicle, make_user, make_vehicle):
+    other_vehicle = make_vehicle(customer, plate='XYZ123')
+    private_vehicle = make_vehicle(make_user('other'), plate='SAM111')
+    client.force_login(customer)
+
+    body = client.get(reverse('vehicles:list'), {'history': '1'}).content.decode()
+
+    for owned in (vehicle, other_vehicle):
+        assert f'href="{reverse("vehicles:detail", kwargs={"pk": owned.pk})}#history-heading"' in body
+    assert private_vehicle.plate not in body
+    assert 'View service history' in body
+    assert 'id="history-heading"' in client.get(reverse('vehicles:detail', kwargs={'pk': vehicle.pk})).content.decode()
+
+
+def test_history_vehicle_chooser_keeps_history_links_when_paginating(client, customer, make_vehicle):
+    for number in range(21):
+        make_vehicle(customer, plate=f'CAR{number:03}')
+    client.force_login(customer)
+
+    first = client.get(reverse('vehicles:list'), {'history': '1'}).content.decode()
+    second = client.get(reverse('vehicles:list'), {'history': '1', 'page': 2}).content.decode()
+    assert '?page=2&amp;history=1' in first
+    assert '?page=1&amp;history=1' in second
+    assert 'View service history' in second
+
+
 def test_customer_cannot_change_or_delete_someone_elses_vehicle(client, customer, make_user, make_vehicle):
     other = make_user('sam')
     theirs = make_vehicle(other, plate='SAM111')

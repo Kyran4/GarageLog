@@ -880,12 +880,55 @@ def test_a_resupply_request_cannot_be_approved_more_than_once(
     assert transfer_request.status == StockTransferRequest.Status.APPROVED
 
 
-def test_workshop_stock_navigation_exposes_direct_resupply_only_to_admins(
-        client, admin_user, mechanic, other_workshop):
+def test_workshop_stock_navigation_exposes_direct_resupply_to_admins_and_mechanics(
+        client, admin_user, mechanic, other_workshop, corolla_parts, make_stock):
+    part = corolla_parts['filter_old']
+    make_stock(mechanic.workshop, part)
     client.force_login(admin_user)
     admin_body = client.get(reverse('inventory:stock'), {'workshop': other_workshop.pk}).content.decode()
     assert f'href="{reverse("inventory:stock_transfer")}?workshop={other_workshop.pk}"' in admin_body
 
     client.force_login(mechanic)
     mechanic_body = client.get(reverse('inventory:stock')).content.decode()
-    assert reverse('inventory:stock_transfer') not in mechanic_body
+    assert f'href="{reverse("inventory:stock_transfer")}?workshop={mechanic.workshop_id}"' in mechanic_body
+    part_link = f'{reverse("inventory:stock_transfer")}?part={part.pk}&amp;workshop={mechanic.workshop_id}'
+    assert part_link in mechanic_body
+    assert part_link in client.get(reverse('inventory:detail', kwargs={'pk': part.pk})).content.decode()
+
+
+def test_mechanic_requests_stock_for_own_workshop_only(
+        client, mechanic, other_workshop, warehouse, corolla_parts, make_stock):
+    part = corolla_parts['filter_old']
+    held = make_stock(warehouse, part, quantity=5)
+    client.force_login(mechanic)
+    url = reverse('inventory:stock_transfer')
+
+    form_response = client.get(url, {'workshop': other_workshop.pk, 'part': part.pk})
+    assert form_response.status_code == 200
+    assert str(form_response.context['form']['workshop'].value()) == str(mechanic.workshop_id)
+    assert list(form_response.context['form'].fields['workshop'].queryset) == [mechanic.workshop]
+    invalid = client.post(url, {'workshop': other_workshop.pk, 'part': part.pk, 'quantity': 2})
+    assert invalid.status_code == 200
+    assert 'workshop' in invalid.context['form'].errors
+    assert not StockTransferRequest.objects.exists()
+
+    response = client.post(url, {'workshop': mechanic.workshop_id, 'part': part.pk, 'quantity': 2})
+    assert response.url == reverse('inventory:stock')
+    transfer = StockTransferRequest.objects.get()
+    assert (transfer.workshop, transfer.requested_by, transfer.status) == (
+        mechanic.workshop, mechanic, StockTransferRequest.Status.PENDING,
+    )
+    held.refresh_from_db()
+    assert held.quantity == 5
+
+
+def test_resupply_request_denied_to_customers_and_mechanics_without_active_workshop(
+        client, customer, warehouse_staff, make_user, make_workshop):
+    inactive = make_workshop('Inactive', is_active=False)
+    no_workshop = make_user('unassigned', User.Role.MECHANIC, workshop=None)
+    inactive_mechanic = make_user('inactiveworkshop', User.Role.MECHANIC, workshop=inactive)
+    url = reverse('inventory:stock_transfer')
+    for user in (customer, warehouse_staff, no_workshop, inactive_mechanic):
+        client.force_login(user)
+        assert client.get(url).status_code == 403
+        assert client.post(url, {}).status_code == 403

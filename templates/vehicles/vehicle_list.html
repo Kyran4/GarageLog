@@ -8,6 +8,8 @@
     {% if can_add %}<a class="btn btn-primary" href="{% url 'vehicles:create' %}">Add a vehicle</a>{% endif %}
 </div>
 
+{% if show_history_links %}<p>Select a vehicle to view its service history.</p>{% endif %}
+
 {% if can_search %}
 <form method="get" class="row g-2 align-items-end mb-3" role="search" aria-label="Search vehicles by number plate">
     <div class="col-sm-6 col-md-4">
@@ -43,7 +45,7 @@
                 {% if can_search %}<td>{{ vehicle.owner.get_full_name|default:vehicle.owner.username }}</td>{% endif %}
                 <td>{% include 'includes/expiry.html' with date=vehicle.wof_expiry status=vehicle.wof_status %}</td>
                 <td>{% include 'includes/expiry.html' with date=vehicle.rego_expiry status=vehicle.rego_status %}</td>
-                <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{% url 'vehicles:detail' vehicle.pk %}">View<span class="visually-hidden"> {{ vehicle.plate }}</span></a></td>
+                <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{% url 'vehicles:detail' vehicle.pk %}{% if show_history_links %}#history-heading{% endif %}">{% if show_history_links %}View service history{% else %}View{% endif %}<span class="visually-hidden"> {{ vehicle.plate }}</span></a></td>
             </tr>
             {% endfor %}
         </tbody>
@@ -52,9 +54,9 @@
 {% if is_paginated %}
 <nav aria-label="Vehicle list pages">
     <ul class="pagination">
-        {% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if search_text %}&amp;q={{ search_text|urlencode }}{% endif %}">Previous</a></li>{% endif %}
+        {% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if search_text %}&amp;q={{ search_text|urlencode }}{% endif %}{% if show_history_links %}&amp;history=1{% endif %}">Previous</a></li>{% endif %}
         <li class="page-item active" aria-current="page"><span class="page-link">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span></li>
-        {% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if search_text %}&amp;q={{ search_text|urlencode }}{% endif %}">Next</a></li>{% endif %}
+        {% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if search_text %}&amp;q={{ search_text|urlencode }}{% endif %}{% if show_history_links %}&amp;history=1{% endif %}">Next</a></li>{% endif %}
     </ul>
 </nav>
 {% endif %}

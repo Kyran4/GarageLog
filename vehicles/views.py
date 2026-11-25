@@ -61,6 +61,7 @@ class VehicleListView(VehicleAccessMixin, ListView):
         context['can_add'] = not user.is_mechanic
         context['search_text'] = self.request.GET.get('q', '').strip()
         context['needs_search'] = user.is_mechanic and len(self.get_search_text()) < 2
+        context['show_history_links'] = user.is_customer and self.request.GET.get('history') == '1'
         return context
 
 

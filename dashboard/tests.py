@@ -246,6 +246,8 @@ def test_customer_dashboard_shows_only_recent_completed_service_history(
     assert 'Private Service' not in body
     assert reverse('vehicles:detail', kwargs={'pk': vehicle.pk}) in body
     assert reverse('jobcard_invoice', kwargs={'pk': job_card.pk}) in body
+    assert f'href="{reverse("vehicles:list")}?history=1"' in body
+    assert f'href="{reverse("vehicles:detail", kwargs={"pk": vehicle.pk})}#history-heading"' in body
 
 
 def test_customer_dashboard_ignores_bookings_that_already_happened(client, customer, vehicle, make_booking, open_day):
