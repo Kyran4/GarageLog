@@ -148,36 +148,27 @@ class JobPartCreateView(JobCardQuerysetMixin, RoleRequiredMixin, CreateView):
                 quantity = form.cleaned_data["quantity"]
                 workshop = self.job_card.booking.workshop
                 warehouse = Workshop.get_warehouse()
-                stock_locations = [
-                    (JobPart.Source.WORKSHOP, workshop),
-                    (JobPart.Source.WAREHOUSE, warehouse),
-                ]
                 selected_stock = None
                 selected_source = JobPart.Source.WAREHOUSE
-                for candidate_source, location in stock_locations:
-                    if location is None:
-                        continue
-                    stock_item = (
-                        StockItem.objects.select_for_update()
-                        .filter(workshop=location, part=part)
-                        .first()
-                    )
-                    if not stock_item or stock_item.quantity < quantity:
-                        continue
+                stock_item = (
+                    StockItem.objects.select_for_update()
+                    .filter(workshop=workshop, part=part)
+                    .first()
+                )
+                if stock_item and stock_item.quantity >= quantity:
                     reserved = StockItem.objects.filter(
                         pk=stock_item.pk,
                         quantity__gte=quantity,
                     ).update(quantity=F("quantity") - quantity)
                     if reserved:
                         selected_stock = stock_item
-                        selected_source = candidate_source
-                        break
+                        selected_source = JobPart.Source.WORKSHOP
 
                 form.instance.source = selected_source
                 form.instance.stock_item = selected_stock
                 form.instance.supply_status = (
                     JobPart.SupplyStatus.READY
-                    if selected_stock else JobPart.SupplyStatus.BACKORDERED
+                    if selected_stock else JobPart.SupplyStatus.PENDING
                 )
                 if not form.data.get("unit_price"):
                     warehouse_stock = (
@@ -198,10 +189,10 @@ class JobPartCreateView(JobCardQuerysetMixin, RoleRequiredMixin, CreateView):
                     )
 
             response = super().form_valid(form)
-            if form.instance.supply_status == JobPart.SupplyStatus.BACKORDERED:
+            if form.instance.supply_status == JobPart.SupplyStatus.PENDING:
                 messages.success(
                     self.request,
-                    "The part is out of warehouse stock and has been added to the backorder queue.",
+                    "The part has been requested and is awaiting warehouse approval.",
                 )
             else:
                 messages.success(self.request, "The part has been added to the job card.")
@@ -266,6 +257,10 @@ class SupplierOrderListView(WarehouseStaffRequiredMixin, ListView):
             "job_card__mechanic",
             "part",
         )
+        context["pending_job_requests"] = JobPart.objects.filter(
+            source=JobPart.Source.WAREHOUSE,
+            supply_status=JobPart.SupplyStatus.PENDING,
+        ).select_related("part", "job_card__booking__workshop", "job_card__mechanic")
         context["stock_transfer_requests"] = StockTransferRequest.objects.select_related(
             "part",
             "workshop",
@@ -278,6 +273,47 @@ class SupplierOrderListView(WarehouseStaffRequiredMixin, ListView):
             and self.request.user.workshop.is_parts_warehouse
         )
         return context
+
+
+class JobPartRequestDecisionView(RoleRequiredMixin, View):
+    allowed_roles = (User.Role.MECHANIC,)
+
+    def test_func(self):
+        user = self.request.user
+        return user.is_mechanic and user.workshop_id and user.workshop.is_parts_warehouse
+
+    def post(self, request, part_id, decision):
+        with transaction.atomic():
+            item = get_object_or_404(JobPart.objects.select_for_update(), pk=part_id)
+            if item.source != JobPart.Source.WAREHOUSE or item.supply_status != JobPart.SupplyStatus.PENDING:
+                messages.error(request, "This job part request has already been processed.")
+                return redirect("supplier_order_list")
+            if decision == "reject":
+                item.supply_status = JobPart.SupplyStatus.REJECTED
+                item.save(update_fields=["supply_status"])
+                messages.success(request, "The job part request was rejected. No stock was allocated.")
+                return redirect("supplier_order_list")
+
+            warehouse = Workshop.get_warehouse()
+            stock = (
+                StockItem.objects.select_for_update().filter(workshop=warehouse, part_id=item.part_id).first()
+                if warehouse and item.part_id else None
+            )
+            available = stock.quantity if stock else 0
+            if available < item.quantity:
+                messages.error(request, f"Cannot approve this request: only {available} × {item.name} remain in warehouse stock.")
+                return redirect("supplier_order_list")
+            updated = StockItem.objects.filter(pk=stock.pk, quantity__gte=item.quantity).update(
+                quantity=F("quantity") - item.quantity,
+            )
+            if not updated:
+                messages.error(request, "Warehouse stock changed. The request was not approved; please try again.")
+                return redirect("supplier_order_list")
+            item.stock_item = stock
+            item.supply_status = JobPart.SupplyStatus.READY
+            item.save(update_fields=["stock_item", "supply_status"])
+        messages.success(request, "The job part request was approved and warehouse stock was allocated.")
+        return redirect("supplier_order_list")
 
 
 class SupplierOrderCreateView(WarehouseStaffRequiredMixin, CreateView):
@@ -487,7 +523,7 @@ class InvoiceExportView(InvoiceAccessMixin, View):
         writer.writerow([])
         writer.writerow(["Item", "Quantity", "Unit price", "Total"])
         writer.writerow(["Labour", 1, job_card.labor_charge, job_card.labor_charge])
-        for item in job_card.parts.all():
+        for item in job_card.invoice_parts:
             writer.writerow([csv_safe_text(item.name), item.quantity, item.unit_price, item.line_total])
             if item.freight_charge:
                 writer.writerow([csv_safe_text(item.freight_description), 1, item.freight_charge, item.freight_charge])
@@ -605,7 +641,7 @@ class JobCardCreateView(RoleRequiredMixin, View):
                 ),
                 supply_status=(
                     JobPart.SupplyStatus.READY
-                    if reserved else JobPart.SupplyStatus.BACKORDERED
+                    if reserved else JobPart.SupplyStatus.PENDING
                 ),
                 quantity=quote_part.quantity,
                 unit_cost=stock_item.unit_cost if reserved else None,

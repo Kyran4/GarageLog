@@ -68,7 +68,7 @@
                     <td class="text-end">
                         {% if part.supply_status == "BACKORDERED" or part.supply_status == "ON_ORDER" %}
                         <a class="btn btn-sm btn-outline-secondary" href="{% url 'supplier_order_list' %}">Warehouse orders</a>
-                        {% elif part.supply_status == "READY" and not part.supplier_order %}
+                        {% elif not part.supplier_order %}
                         <form method="post" action="{% url 'jobcard_part_remove' job_card.pk part.pk %}">
                             {% csrf_token %}
                             <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
@@ -297,9 +297,9 @@
             } else if (warehouseAvailable >= requested) {
                 stockStatus.textContent = "Not enough at " + selectedResult.workshop_name
                     + "; " + warehouseAvailable + " available at " + selectedResult.warehouse_name
-                    + ". This part will be requested from the warehouse.";
+                    + ". This part will be requested for warehouse approval.";
             } else {
-                stockStatus.textContent = "Not enough stock at the workshop or warehouse. This part will be backordered through the warehouse.";
+                stockStatus.textContent = "Not enough stock at the workshop or warehouse. The request will await warehouse approval when stock is available.";
             }
         }
 
