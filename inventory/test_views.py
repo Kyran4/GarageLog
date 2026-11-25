@@ -6,7 +6,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import User
-from jobs.models import SupplierOrder
+from jobs.models import JobCard, JobPart, SupplierOrder
 
 from .models import Part, StockItem, StockTransferRequest
 
@@ -654,6 +654,119 @@ def test_warehouse_stock_list_shows_outstanding_supplier_order_quantity(
     order.save(update_fields=['received_at'])
     response = client.get(reverse('inventory:stock'))
     assert 'On order: 6' not in response.content.decode()
+
+
+def test_part_pages_show_outstanding_requests_for_the_relevant_workshop_and_jobs(
+    client, mechanic, admin_user, customer, make_booking, make_part, make_stock, other_workshop,
+    make_user, warehouse_staff,
+):
+    part = make_part()
+    make_stock(mechanic.workshop, part)
+    for quantity, status, workshop in [
+        (2, StockTransferRequest.Status.PENDING, mechanic.workshop),
+        (3, StockTransferRequest.Status.PENDING, mechanic.workshop),
+        (8, StockTransferRequest.Status.APPROVED, mechanic.workshop),
+        (9, StockTransferRequest.Status.PENDING, other_workshop),
+    ]:
+        StockTransferRequest.objects.create(
+            part=part, workshop=workshop, quantity=quantity, status=status, requested_by=admin_user,
+        )
+    booking = make_booking(customer, mechanic=mechanic, workshop=mechanic.workshop)
+    card = JobCard.objects.create(booking=booking, mechanic=mechanic)
+    for quantity, status in [
+        (4, JobPart.SupplyStatus.BACKORDERED),
+        (2, JobPart.SupplyStatus.ON_ORDER),
+        (7, JobPart.SupplyStatus.READY),
+    ]:
+        JobPart.objects.create(
+            job_card=card, part=part, name=part.name, quantity=quantity,
+            source=JobPart.Source.WAREHOUSE, supply_status=status, unit_price=10,
+        )
+    other_mechanic = make_user('another-mechanic', User.Role.MECHANIC, workshop=mechanic.workshop)
+    other_card = JobCard.objects.create(
+        booking=make_booking(customer, mechanic=other_mechanic, workshop=mechanic.workshop),
+        mechanic=other_mechanic,
+    )
+    JobPart.objects.create(
+        job_card=other_card, part=part, name=part.name, quantity=20,
+        source=JobPart.Source.WAREHOUSE, supply_status=JobPart.SupplyStatus.BACKORDERED, unit_price=10,
+    )
+    client.force_login(mechanic)
+
+    for url in [
+        reverse('inventory:search'),
+        reverse('inventory:stock'),
+        reverse('inventory:detail', kwargs={'pk': part.pk}),
+    ]:
+        body = client.get(url).content.decode()
+        assert 'Resupply requested: 5' in body
+        assert 'Job parts requested: 6' in body
+
+    client.force_login(admin_user)
+    body = client.get(reverse('inventory:search'), {'workshop': other_workshop.pk}).content.decode()
+    assert 'Resupply requested: 9' in body
+    assert 'Job parts requested:' not in body
+
+    client.force_login(warehouse_staff)
+    body = client.get(reverse('inventory:search')).content.decode()
+    assert 'Resupply requested: 14' in body
+    assert 'Job parts requested: 26' in body
+
+    StockTransferRequest.objects.filter(workshop=mechanic.workshop).update(status=StockTransferRequest.Status.APPROVED)
+    JobPart.objects.filter(job_card=card).update(supply_status=JobPart.SupplyStatus.READY)
+    client.force_login(mechanic)
+    body = client.get(reverse('inventory:search')).content.decode()
+    assert 'Resupply requested:' not in body
+    assert 'Job parts requested:' not in body
+
+
+def test_request_history_respects_roles_and_shows_all_statuses(
+    client, customer, mechanic, warehouse_staff, admin_user, other_workshop,
+    make_part, make_booking, make_user,
+):
+    part = make_part()
+    own = StockTransferRequest.objects.create(
+        part=part, workshop=mechanic.workshop, quantity=2, requested_by=mechanic,
+        status=StockTransferRequest.Status.REJECTED,
+    )
+    other = StockTransferRequest.objects.create(
+        part=part, workshop=other_workshop, quantity=3, requested_by=admin_user,
+    )
+    card = JobCard.objects.create(
+        booking=make_booking(customer, mechanic=mechanic, workshop=mechanic.workshop), mechanic=mechanic,
+    )
+    job = JobPart.objects.create(
+        job_card=card, part=part, name=part.name, source=JobPart.Source.WAREHOUSE,
+        supply_status=JobPart.SupplyStatus.READY, unit_price=10,
+    )
+    other_mechanic = make_user('other-staff', User.Role.MECHANIC, workshop=other_workshop)
+    other_card = JobCard.objects.create(
+        booking=make_booking(customer, mechanic=other_mechanic, workshop=other_workshop), mechanic=other_mechanic,
+    )
+    other_job = JobPart.objects.create(
+        job_card=other_card, part=part, name=part.name, source=JobPart.Source.WAREHOUSE,
+        supply_status=JobPart.SupplyStatus.BACKORDERED, unit_price=10,
+    )
+    url = reverse('inventory:requests')
+    assert client.get(url).status_code == 302
+    client.force_login(customer)
+    assert client.get(url).status_code == 403
+    client.force_login(mechanic)
+    response = client.get(url)
+    assert list(response.context['transfers']) == [own]
+    assert list(response.context['job_requests']) == [job]
+    assert 'Rejected' in response.content.decode()
+    assert 'Ready' in response.content.decode()
+    for user in (admin_user, warehouse_staff):
+        client.force_login(user)
+        response = client.get(url)
+        assert set(response.context['transfers']) == {own, other}
+        assert set(response.context['job_requests']) == {job, other_job}
+    unassigned = make_user('unassigned', User.Role.MECHANIC, workshop=None)
+    client.force_login(unassigned)
+    response = client.get(url)
+    assert list(response.context['transfers']) == []
+    assert list(response.context['job_requests']) == []
 
 
 def test_the_admins_stock_picker_labels_the_warehouse(client, admin_user, workshop, warehouse):

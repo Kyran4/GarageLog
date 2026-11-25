@@ -7,6 +7,7 @@
     <h1 class="h2 mb-0">{% if workshop %}{{ workshop.name }} stock{% else %}Workshop stock{% endif %}{% if workshop.is_parts_warehouse %} <span class="badge text-bg-secondary fs-6 align-middle">Parts warehouse</span>{% endif %}</h1>
     <div class="d-flex flex-wrap gap-2">
         <a class="btn btn-outline-primary" href="{% url 'inventory:search' %}">Find parts</a>
+        <a class="btn btn-outline-primary" href="{% url 'inventory:requests' %}">Part requests</a>
         {% if workshop and workshop.is_active and not workshop.is_parts_warehouse %}<a class="btn btn-primary" href="{% url 'inventory:stock_transfer' %}?workshop={{ workshop.pk }}">Request resupply from warehouse</a>{% endif %}
         {% if workshop.is_parts_warehouse %}<a class="btn btn-primary" href="{% url 'supplier_stock_order_create' %}">Order stock from supplier</a>{% endif %}
         {% if workshop %}<a class="btn btn-primary" href="{% url 'inventory:stock_add' %}{{ workshop_query }}">Add a part to stock</a>{% endif %}
@@ -79,7 +80,9 @@
                 <td>{{ item.part.get_category_display }}</td>
                 <td>{{ item.quantity }}
                     {% if item.is_out %}<span class="badge text-bg-danger">Out of stock</span>{% elif item.is_low %}<span class="badge text-bg-warning">Low</span>{% endif %}
-                    {% if item.on_order_quantity %}<span class="badge text-bg-info">On order: {{ item.on_order_quantity }}</span>{% endif %}</td>
+                    {% if item.on_order_quantity %}<span class="badge text-bg-info">On order: {{ item.on_order_quantity }}</span>{% endif %}
+                    {% if item.part.resupply_requested %}<span class="badge text-bg-info">Resupply requested: {{ item.part.resupply_requested }}</span>{% endif %}
+                    {% if item.part.job_requested %}<span class="badge text-bg-info">Job parts requested: {{ item.part.job_requested }}</span>{% endif %}</td>
                 <td>{{ item.reorder_level }}</td>
                 <td>${{ item.price }}{% if item.unit_price is not None %} <span class="badge text-bg-info">Workshop price</span>{% endif %}</td>
                 <td>{{ item.bin_location|default:"-" }}</td>

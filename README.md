@@ -118,6 +118,7 @@ The optional **parts warehouse** is the central store that supplies workshops:
 - Warehouse staff manage its stock and see a stock-focused dashboard with no bookings.
 - Every workshop's mechanics can see what the warehouse holds, read-only, next to their own stock in the parts search and on a part's page, so they know what can be supplied. Only warehouse staff and admins can change the warehouse's stock.
 - Mechanics can request warehouse stock for their own active workshop; admins can request it for any active workshop. Warehouse staff approve or reject requests before stock moves.
+- The parts and stock pages show outstanding resupply and job-card request quantities. The part requests page lists request statuses, including completed and rejected resupply requests; mechanics see their own workshop's resupply requests and their assigned job-card requests.
 - Admins see the warehouse listed separately on their dashboard, with a link to its stock.
 
 ## Parts library

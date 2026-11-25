@@ -2,7 +2,7 @@ from django.contrib import messages
 from django.db import transaction
 from django.db.models import F, Q, Sum
 from django.http import QueryDict
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views import View
@@ -10,6 +10,7 @@ from django.views.generic import CreateView, DeleteView, DetailView, FormView, L
 
 from accounts.mixins import RoleRequiredMixin
 from accounts.models import User
+from jobs.models import JobPart
 from workshops.models import Workshop
 
 from .forms import PartSearchForm, StockItemForm, WarehouseStockTransferForm
@@ -47,6 +48,29 @@ class WorkshopScopeMixin:
         if self.request.user.is_admin_role and workshop:
             return f'?workshop={workshop.pk}'
         return ''
+
+
+def add_request_quantities(parts, workshop, user):
+    if not workshop:
+        return
+    transfers = StockTransferRequest.objects.filter(
+        part__in=parts, status=StockTransferRequest.Status.PENDING,
+    )
+    job_parts = JobPart.objects.filter(
+        part__in=parts,
+        source=JobPart.Source.WAREHOUSE,
+        supply_status__in=[JobPart.SupplyStatus.BACKORDERED, JobPart.SupplyStatus.ON_ORDER],
+    )
+    if not workshop.is_parts_warehouse:
+        transfers = transfers.filter(workshop=workshop)
+        job_parts = job_parts.filter(job_card__booking__workshop=workshop)
+    if user.is_mechanic and not user.workshop.is_parts_warehouse:
+        job_parts = job_parts.filter(job_card__mechanic=user)
+    transfer_totals = dict(transfers.values_list('part_id').annotate(total=Sum('quantity')))
+    job_totals = dict(job_parts.values_list('part_id').annotate(total=Sum('quantity')))
+    for part in parts:
+        part.resupply_requested = transfer_totals.get(part.pk)
+        part.job_requested = job_totals.get(part.pk)
 
 
 # ---------------------------------------------------------------- finding parts
@@ -101,6 +125,7 @@ class PartSearchView(StaffOnlyMixin, WorkshopScopeMixin, ListView):
             }
         for part in parts:
             part.workshop_stock = stock.get(part.pk)
+        add_request_quantities(parts, workshop, self.request.user)
         context['parts'] = parts
 
         # What the parts warehouse holds, shown beside the workshop's own stock (read-only).
@@ -148,12 +173,29 @@ class PartDetailView(StaffOnlyMixin, WorkshopScopeMixin, DetailView):
             item.can_edit = user.is_admin_role or item.workshop_id == user.workshop_id
         context['stock_rows'] = rows
         context['workshop'] = self.get_workshop()
+        add_request_quantities([self.object], context['workshop'], user)
         context['already_stocked'] = (
             context['workshop'] is not None
             and StockItem.objects.filter(part=self.object, workshop=context['workshop']).exists()
         )
         context['workshop_query'] = self.workshop_query()
         return context
+
+
+class PartRequestListView(StaffOnlyMixin, View):
+    def get(self, request):
+        transfers = StockTransferRequest.objects.select_related('part', 'workshop', 'requested_by')
+        job_parts = JobPart.objects.filter(source=JobPart.Source.WAREHOUSE).select_related(
+            'part', 'job_card__booking__workshop', 'job_card__mechanic',
+        )
+        user = request.user
+        if user.is_mechanic and (not user.workshop_id or not user.workshop.is_parts_warehouse):
+            transfers = transfers.filter(workshop_id=user.workshop_id)
+            job_parts = job_parts.filter(job_card__mechanic=user)
+        return render(request, 'inventory/part_requests.html', {
+            'transfers': transfers,
+            'job_requests': job_parts,
+        })
 
 
 # ---------------------------------------------------------------- a workshop's stock
@@ -190,6 +232,9 @@ class StockListView(StaffOnlyMixin, WorkshopScopeMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         workshop = self.get_workshop()
+        items = list(context['items'])
+        add_request_quantities([item.part for item in items], workshop, self.request.user)
+        context['items'] = items
         everything = StockItem.objects.filter(workshop=workshop) if workshop else StockItem.objects.none()
         query = QueryDict(mutable=True)
         query.update({key: value for key, value in self.request.GET.items() if key != 'page' and value})
