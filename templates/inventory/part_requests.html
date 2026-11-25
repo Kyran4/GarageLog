@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+
+{% block title %}Part requests | GarageLog{% endblock %}
+
+{% block content %}
+<nav aria-label="Breadcrumb"><a href="{% url 'inventory:search' %}">&larr; Back to parts</a></nav>
+<h1 class="h2 my-3">Part requests</h1>
+<p class="text-body-secondary">Outstanding and completed requests visible to you. Job parts removed from a job card are not retained here.</p>
+
+<section class="mb-5" aria-labelledby="resupply-heading">
+    <h2 class="h4" id="resupply-heading">Workshop resupply requests</h2>
+    {% if transfers %}
+    <div class="table-responsive">
+        <table class="table table-striped align-middle">
+            <thead><tr><th scope="col">Part</th><th scope="col">Workshop</th><th scope="col">Quantity</th><th scope="col">Requested by</th><th scope="col">Requested</th><th scope="col">Status</th></tr></thead>
+            <tbody>
+                {% for transfer in transfers %}
+                <tr>
+                    <th scope="row"><a href="{% url 'inventory:detail' transfer.part_id %}">{{ transfer.part.part_number }} — {{ transfer.part.name }}</a></th>
+                    <td>{{ transfer.workshop.name }}</td>
+                    <td>{{ transfer.quantity }}</td>
+                    <td>{{ transfer.requested_by.get_full_name|default:transfer.requested_by.username }}</td>
+                    <td>{{ transfer.requested_at|date:"j M Y H:i" }}</td>
+                    <td>{{ transfer.get_status_display }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}<p>No workshop resupply requests.</p>{% endif %}
+</section>
+
+<section aria-labelledby="job-requests-heading">
+    <h2 class="h4" id="job-requests-heading">Job-card part requests</h2>
+    {% if job_requests %}
+    <div class="table-responsive">
+        <table class="table table-striped align-middle">
+            <thead><tr><th scope="col">Part</th><th scope="col">Job</th><th scope="col">Workshop</th><th scope="col">Quantity</th><th scope="col">Mechanic</th><th scope="col">Status</th></tr></thead>
+            <tbody>
+                {% for item in job_requests %}
+                <tr>
+                    <th scope="row">{% if item.part %}<a href="{% url 'inventory:detail' item.part_id %}">{{ item.part.part_number }} — {{ item.name }}</a>{% else %}{{ item.name }}{% endif %}</th>
+                    <td>{% if user.is_admin_role or item.job_card.mechanic_id == user.pk %}<a href="{% url 'jobcard_detail' item.job_card_id %}">#{{ item.job_card_id }}</a>{% else %}#{{ item.job_card_id }}{% endif %}</td>
+                    <td>{{ item.job_card.booking.workshop.name }}</td>
+                    <td>{{ item.quantity }}</td>
+                    <td>{{ item.job_card.mechanic.get_full_name|default:item.job_card.mechanic.username }}</td>
+                    <td>{{ item.get_supply_status_display }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}<p>No job-card part requests.</p>{% endif %}
+</section>
+{% endblock %}

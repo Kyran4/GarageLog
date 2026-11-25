@@ -14,6 +14,14 @@
     {% endif %}
 </div>
 
+{% if part.resupply_requested or part.job_requested %}
+<p>
+    {% if part.resupply_requested %}<span class="badge text-bg-info">Resupply requested: {{ part.resupply_requested }}</span>{% endif %}
+    {% if part.job_requested %}<span class="badge text-bg-info">Job parts requested: {{ part.job_requested }}</span>{% endif %}
+    <a href="{% url 'inventory:requests' %}">View part requests</a>
+</p>
+{% endif %}
+
 <dl class="row">
     <dt class="col-sm-3">Part number</dt>
     <dd class="col-sm-9">{{ part.part_number }}</dd>
